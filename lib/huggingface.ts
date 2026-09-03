@@ -6,6 +6,7 @@ export interface HfGenerationParams {
   num_inference_steps?: number;
   guidance_scale?: number;
   seed?: number;
+  tokenOverride?: string | null;
 }
 
 export interface HfDetectionResult {
@@ -14,7 +15,8 @@ export interface HfDetectionResult {
   rawScores: { label: string; score: number }[];
 }
 
-export function getHuggingFaceToken(): string | null {
+export function getHuggingFaceToken(customToken?: string | null): string | null {
+  if (customToken && customToken.trim().length > 0) return customToken.trim();
   const token = process.env.HUGGINGFACE_API_KEY || process.env.HF_TOKEN || "";
   return token.trim().length > 0 ? token.trim() : null;
 }
@@ -23,43 +25,63 @@ export async function generateImageWithHuggingFace(
   params: HfGenerationParams,
   modelName = process.env.HF_IMAGE_GEN_MODEL || "black-forest-labs/FLUX.1-schnell"
 ): Promise<{ success: boolean; imageBase64?: string; error?: string; modelUsed: string }> {
-  const token = getHuggingFaceToken();
+  const token = getHuggingFaceToken(params.tokenOverride);
 
   if (!token) {
     return {
       success: false,
-      error: "HUGGINGFACE_API_KEY or HF_TOKEN is not configured in .env.local",
+      error: "HUGGINGFACE_API_KEY or HF_TOKEN is not configured",
       modelUsed: modelName,
     };
   }
 
-  try {
-    const endpoint = `https://api-inference.huggingface.co/models/${modelName}`;
-    const payload: Record<string, any> = {
-      inputs: params.prompt,
-      parameters: {},
-    };
+  // List of endpoint routers to try (Hugging Face supports direct and router endpoints)
+  const endpoints = [
+    `https://api-inference.huggingface.co/models/${modelName}`,
+    `https://router.huggingface.co/hf-inference/models/${modelName}`,
+  ];
 
-    if (params.negative_prompt) {
-      payload.parameters.negative_prompt = params.negative_prompt;
-    }
-    if (params.seed !== undefined) {
-      payload.parameters.seed = params.seed;
-    }
-    if (params.guidance_scale !== undefined) {
-      payload.parameters.guidance_scale = params.guidance_scale;
-    }
+  const payload: Record<string, any> = {
+    inputs: params.prompt,
+    parameters: {},
+  };
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+  if (params.negative_prompt) {
+    payload.parameters.negative_prompt = params.negative_prompt;
+  }
+  if (params.seed !== undefined) {
+    payload.parameters.seed = params.seed;
+  }
+  if (params.guidance_scale !== undefined) {
+    payload.parameters.guidance_scale = params.guidance_scale;
+  }
 
-    if (!response.ok) {
+  let lastError = "";
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString("base64");
+        const mimeType = response.headers.get("content-type") || "image/jpeg";
+        const dataUrl = `data:${mimeType};base64,${base64}`;
+
+        return {
+          success: true,
+          imageBase64: dataUrl,
+          modelUsed: modelName,
+        };
+      }
+
       let errDetail = `Status ${response.status}: ${response.statusText}`;
       try {
         const errJson = await response.json();
@@ -69,37 +91,25 @@ export async function generateImageWithHuggingFace(
       } catch {
         // Ignored
       }
-      return {
-        success: false,
-        error: errDetail,
-        modelUsed: modelName,
-      };
+      lastError = errDetail;
+    } catch (err: any) {
+      lastError = err.message || "Network error calling Hugging Face";
     }
-
-    const arrayBuffer = await response.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString("base64");
-    const mimeType = response.headers.get("content-type") || "image/jpeg";
-    const dataUrl = `data:${mimeType};base64,${base64}`;
-
-    return {
-      success: true,
-      imageBase64: dataUrl,
-      modelUsed: modelName,
-    };
-  } catch (error: any) {
-    return {
-      success: false,
-      error: error.message || "Failed to reach Hugging Face Inference API",
-      modelUsed: modelName,
-    };
   }
+
+  return {
+    success: false,
+    error: lastError,
+    modelUsed: modelName,
+  };
 }
 
 export async function detectAiWithHuggingFace(
   imageBuffer: Buffer,
+  tokenOverride?: string | null,
   modelName = process.env.HF_IMAGE_DETECT_MODEL || "umm-maybe/AI-image-detector"
 ): Promise<{ success: boolean; result?: HfDetectionResult; error?: string }> {
-  const token = getHuggingFaceToken();
+  const token = getHuggingFaceToken(tokenOverride);
 
   if (!token) {
     return {

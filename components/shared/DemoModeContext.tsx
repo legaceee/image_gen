@@ -12,21 +12,18 @@ interface DemoModeContextType {
 const DemoModeContext = createContext<DemoModeContextType | undefined>(undefined);
 
 export function DemoModeProvider({ children }: { children: ReactNode }) {
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(true); // Default to TRUE for presentation reliability!
+  // Default to false so live real dynamic image generation from text runs out of the box!
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check saved state in localStorage if exists
     try {
       const saved = localStorage.getItem("forensic_demo_mode");
       if (saved !== null) {
         setIsDemoMode(saved === "true");
       }
-    } catch {
-      // Ignored
-    }
+    } catch {}
 
-    // Keyboard shortcut listener: Ctrl+Shift+D or Cmd+Shift+D
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
@@ -36,11 +33,11 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
             localStorage.setItem("forensic_demo_mode", String(next));
           } catch {}
           toast({
-            type: next ? "info" : "warning",
-            title: next ? "DEMO MODE ENGAGED" : "LIVE CLOUD INFERENCE ACTIVE",
+            type: next ? "warning" : "info",
+            title: next ? "OFFLINE DEMO MODE" : "DYNAMIC GENERATION ACTIVE",
             message: next
-              ? "Presentation Failsafe ON: Instant local benchmark responses enabled."
-              : "Live Mode: External API endpoints will be queried (requires API keys).",
+              ? "Presentation Failsafe ON: Using instant offline preset samples."
+              : "Dynamic Text-to-Image Generation Active: Prompts will generate live images.",
           });
           return next;
         });
@@ -58,11 +55,11 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
         localStorage.setItem("forensic_demo_mode", String(next));
       } catch {}
       toast({
-        type: next ? "info" : "warning",
-        title: next ? "DEMO MODE ACTIVE" : "LIVE INFERENCE ACTIVE",
+        type: next ? "warning" : "info",
+        title: next ? "OFFLINE DEMO MODE" : "DYNAMIC GENERATION ACTIVE",
         message: next
-          ? "Presentation mode enabled. Using local high-fidelity telemetry presets."
-          : "Live API mode enabled. External Hugging Face routes will be queried.",
+          ? "Presentation mode enabled. Using local telemetry presets."
+          : "Dynamic AI generation active. Images will be generated live from prompts.",
       });
       return next;
     });
