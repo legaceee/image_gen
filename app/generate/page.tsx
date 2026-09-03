@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Sparkles, Terminal, ShieldAlert, Info, Key } from "lucide-react";
+import { Sparkles, Info, Key, Zap } from "lucide-react";
 import { PromptConsole } from "@/components/generate/PromptConsole";
 import { ImageCanvas } from "@/components/generate/ImageCanvas";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -9,7 +9,6 @@ import { TelemetryBadge } from "@/components/ui/TelemetryBadge";
 import { ApiKeyModal } from "@/components/shared/ApiKeyModal";
 import { useToast } from "@/components/shared/ToastContext";
 import { useDemoMode } from "@/components/shared/DemoModeContext";
-import { sleep } from "@/lib/utils";
 
 export default function GeneratePage() {
   const { toast } = useToast();
@@ -18,17 +17,17 @@ export default function GeneratePage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState<string>("");
   const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(
-    "/samples/synthetic_portrait.svg"
-  );
-  const [metadata, setMetadata] = useState<any>({
-    prompt: "Cybernetic biometric analysis chamber, volumetric neon electric blue lighting, holographic forensic monitors, 8k hyperrealistic render",
-    model: "Neural Latent Diffusion Synthesizer",
-    seed: 409281,
-    aspectRatio: "1:1",
-    latencyMs: 1420,
-    stylePreset: "Photorealistic",
-  });
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [metadata, setMetadata] = useState<any>(null);
+
+  const STEPS = [
+    "Tokenizing textual prompt into latent embeddings...",
+    "Conditioning diffusion trajectory on semantic tokens...",
+    "Executing reverse denoising through latent space...",
+    "Sampling FLUX Euler trajectory (28 steps)...",
+    "Decoding high-resolution RGB canvas...",
+    "Finalizing synthesis output...",
+  ];
 
   const handleGenerate = async (params: {
     prompt: string;
@@ -39,26 +38,18 @@ export default function GeneratePage() {
     guidance_scale?: number;
   }) => {
     setIsGenerating(true);
-    setGenerationStep("Tokenizing textual prompt vectors...");
+    setGenerationStep(STEPS[0]);
+    let stepIdx = 0;
 
-    // Progressive step status animation
-    const stepTimer = setTimeout(() => {
-      setGenerationStep("Conditioning latent diffusion trajectory...");
-    }, 1200);
-
-    const stepTimer2 = setTimeout(() => {
-      setGenerationStep("Executing reverse denoising steps...");
-    }, 2800);
-
-    const stepTimer3 = setTimeout(() => {
-      setGenerationStep("Decoding high-resolution RGB canvas...");
-    }, 4500);
+    // Rotate through realistic diffusion steps
+    const stepInterval = setInterval(() => {
+      stepIdx = (stepIdx + 1) % STEPS.length;
+      setGenerationStep(STEPS[stepIdx]);
+    }, 4000);
 
     try {
       let clientToken = "";
-      try {
-        clientToken = localStorage.getItem("forensic_hf_api_key") || "";
-      } catch {}
+      try { clientToken = localStorage.getItem("forensic_hf_api_key") || ""; } catch {}
 
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -82,11 +73,19 @@ export default function GeneratePage() {
       setGeneratedImage(data.imageBase64);
       setMetadata(data.metadata);
 
-      toast({
-        type: "success",
-        title: "IMAGE SYNTHESIS COMPLETE",
-        message: data.message || `Rendered from text prompt: "${params.prompt.substring(0, 45)}..."`,
-      });
+      if (data.isFallback || data.isDemo) {
+        toast({
+          type: "warning",
+          title: "OFFLINE BENCHMARK DISPLAYED",
+          message: data.message || "Network unavailable — showing calibrated sample.",
+        });
+      } else {
+        toast({
+          type: "success",
+          title: "IMAGE SYNTHESIS COMPLETE",
+          message: `Generated via ${data.provider === "huggingface" ? "Hugging Face FLUX" : "FLUX Neural Engine"} in ${data.metadata?.latencyMs}ms.`,
+        });
+      }
     } catch (err: any) {
       toast({
         type: "error",
@@ -94,9 +93,7 @@ export default function GeneratePage() {
         message: err.message || "Failed to reach inference pipeline",
       });
     } finally {
-      clearTimeout(stepTimer);
-      clearTimeout(stepTimer2);
-      clearTimeout(stepTimer3);
+      clearInterval(stepInterval);
       setIsGenerating(false);
       setGenerationStep("");
     }
@@ -117,23 +114,21 @@ export default function GeneratePage() {
             Neural Synthesis Studio
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 font-sans mt-1">
-            Dynamic Text-to-Image Generation engine with instant forensic auditing bridge.
+            Type any prompt to generate a real AI image. No API key required. Optionally configure Hugging Face for direct model access.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setApiKeyModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-800 bg-charcoal-900 text-xs font-mono text-slate-300 hover:border-cyber-blue/50 hover:text-cyber-cyan transition-all"
-            title="Configure Hugging Face API Key"
           >
             <Key className="w-3.5 h-3.5 text-cyber-blue" />
-            <span>API Key</span>
+            <span>HF API Key</span>
           </button>
-
           <TelemetryBadge
-            label="STATUS"
-            value={isDemoMode ? "OFFLINE DEMO" : "DYNAMIC AI"}
+            label="ENGINE"
+            value={isDemoMode ? "OFFLINE DEMO" : "FLUX LIVE"}
             variant={isDemoMode ? "threat" : "authentic"}
             pulse={!isDemoMode}
           />
@@ -143,7 +138,7 @@ export default function GeneratePage() {
       {/* Main Split Interface */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Prompt Console */}
-        <div className="lg:col-span-6 space-y-6">
+        <div className="lg:col-span-6 space-y-5">
           <GlassCard variant="default" className="p-6">
             <PromptConsole
               onGenerate={handleGenerate}
@@ -152,18 +147,33 @@ export default function GeneratePage() {
             />
           </GlassCard>
 
-          {/* Quick Info Box */}
-          <div className="p-4 rounded-xl bg-charcoal-900/40 border border-slate-800/80 flex items-start gap-3 text-xs font-sans text-slate-400">
-            <Info className="w-4 h-4 text-cyber-blue flex-shrink-0 mt-0.5" />
-            <div>
-              <span className="font-mono font-bold text-slate-300">Live Synthesis: </span>
-              Type any creative text prompt and click <strong className="text-cyber-cyan font-mono">"EXECUTE NEURAL SYNTHESIS"</strong> to generate a custom image. Once generated, click the glowing{" "}
-              <strong className="text-neon-rose font-mono">"Test Integrity Now"</strong> button to send the new image directly to DeepForensics for multi-spectral analysis.
+          {/* How it works info box */}
+          <div className="p-4 rounded-xl bg-charcoal-900/40 border border-slate-800/80 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-cyber-cyan">
+              <Zap className="w-3.5 h-3.5" />
+              HOW TEXT-TO-IMAGE WORKS
+            </div>
+            <ul className="space-y-1.5 text-xs text-slate-400 font-sans leading-relaxed">
+              <li className="flex items-start gap-2">
+                <span className="text-cyber-blue font-mono font-bold flex-shrink-0">1.</span>
+                <span>Type a description of any image you want (e.g. <em className="text-slate-300">"indian police officer in uniform"</em>, <em className="text-slate-300">"futuristic robot city at night"</em>)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-cyber-blue font-mono font-bold flex-shrink-0">2.</span>
+                <span>Click <strong className="text-cyber-cyan font-mono">"EXECUTE NEURAL SYNTHESIS"</strong>. Generation typically takes <strong className="text-slate-200">10–30 seconds</strong>.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-neon-rose font-mono font-bold flex-shrink-0">3.</span>
+                <span>Click <strong className="text-neon-rose font-mono">"Test Integrity Now"</strong> on the result to run forensic AI detection on your newly generated image.</span>
+              </li>
+            </ul>
+            <div className="pt-1 text-[11px] font-mono text-slate-500">
+              Demo Mode off = Live AI generation. Demo Mode on (Ctrl+Shift+D) = instant offline presets.
             </div>
           </div>
         </div>
 
-        {/* Right Column: High-Tech Viewport Canvas */}
+        {/* Right Column: Image Canvas */}
         <div className="lg:col-span-6 space-y-4">
           <ImageCanvas
             imageUrl={generatedImage}
@@ -173,10 +183,7 @@ export default function GeneratePage() {
         </div>
       </div>
 
-      <ApiKeyModal
-        isOpen={apiKeyModalOpen}
-        onClose={() => setApiKeyModalOpen(false)}
-      />
+      <ApiKeyModal isOpen={apiKeyModalOpen} onClose={() => setApiKeyModalOpen(false)} />
     </div>
   );
 }
