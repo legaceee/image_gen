@@ -1,186 +1,83 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { motion } from "framer-motion";
-import {
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  FileCode,
-  Grid,
-  Activity,
-  Cpu,
-  Layers,
-  Eye,
-  Info,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react";
-import { VerificationCheck } from "@/lib/mockData";
+import { CheckCircle, XCircle, AlertTriangle, MinusCircle } from "lucide-react";
+import type { ForensicCheck } from "@/lib/forensicEngine";
 
-interface ForensicGridProps {
-  checks: VerificationCheck[];
-  suspectedModel: string;
+interface Props {
+  checks: ForensicCheck[];
+  isLoading?: boolean;
 }
 
-export function ForensicGrid({ checks, suspectedModel }: ForensicGridProps) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+const STATUS_CONFIG = {
+  PASS:    { icon: CheckCircle,    color: "text-emerald-500", bg: "bg-emerald-50",  border: "border-emerald-200", label: "Pass" },
+  FAIL:    { icon: XCircle,        color: "text-rose-500",    bg: "bg-rose-50",     border: "border-rose-200",    label: "Fail" },
+  WARNING: { icon: AlertTriangle,  color: "text-amber-500",   bg: "bg-amber-50",    border: "border-amber-200",   label: "Warn" },
+  SKIPPED: { icon: MinusCircle,    color: "text-ink-300",     bg: "bg-ink-50",      border: "border-ink-200",     label: "Skip" },
+};
 
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case "METADATA":
-        return <FileCode className="w-4 h-4 text-cyber-blue" />;
-      case "PIXELS":
-        return <Grid className="w-4 h-4 text-neon-red" />;
-      case "FREQUENCY":
-        return <Activity className="w-4 h-4 text-cyber-cyan" />;
-      case "RESIDUALS":
-        return <Cpu className="w-4 h-4 text-amber-warning" />;
-      case "COMPRESSION":
-        return <Layers className="w-4 h-4 text-cyber-indigo" />;
-      case "SEMANTICS":
-      default:
-        return <Eye className="w-4 h-4 text-matrix-emerald" />;
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "PASSED":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-matrix-emerald/10 border border-matrix-emerald/40 text-matrix-emerald">
-            <CheckCircle2 className="w-3 h-3" />
-            CLEAN / PASS
-          </span>
-        );
-      case "FAILED":
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-neon-red/10 border border-neon-red/40 text-neon-rose">
-            <XCircle className="w-3 h-3" />
-            ANOMALY DETECTED
-          </span>
-        );
-      case "WARNING":
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-warning/10 border border-amber-warning/40 text-amber-300">
-            <AlertTriangle className="w-3 h-3" />
-            SUSPICIOUS
-          </span>
-        );
-    }
-  };
+export function ForensicGrid({ checks, isLoading }: Props) {
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {Array(6).fill(0).map((_, i) => (
+          <div key={i} className="h-28 rounded-xl bg-ink-100/60 animate-pulse border border-ink-200" />
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-mono font-bold uppercase tracking-wider text-slate-200">
-            Forensic Verification Vector Analysis
-          </h3>
-          <p className="text-xs text-slate-400 font-sans mt-0.5">
-            Individual telemetry pipelines analyzing sensor physics, spectral decay, and latent markers.
-          </p>
-        </div>
-        <div className="text-right hidden sm:block">
-          <span className="text-[10px] font-mono text-slate-400">SOURCE ATTRIBUTION:</span>
-          <p className="text-xs font-mono font-bold text-cyber-cyan">{suspectedModel}</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {checks.map((chk) => {
-          const isExpanded = expandedId === chk.id;
-          const isFailed = chk.status === "FAILED";
-
-          return (
-            <motion.div
-              key={chk.id}
-              layout
-              className={`p-3.5 rounded-xl border transition-all ${
-                isFailed
-                  ? "bg-charcoal-900/80 border-neon-red/30 hover:border-neon-red/60"
-                  : chk.status === "PASSED"
-                  ? "bg-charcoal-900/80 border-matrix-emerald/30 hover:border-matrix-emerald/60"
-                  : "bg-charcoal-900/80 border-amber-warning/30 hover:border-amber-warning/60"
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 rounded-lg bg-charcoal-950 border border-slate-800">
-                    {getCategoryIcon(chk.category)}
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-mono font-bold text-slate-100">
-                      {chk.name}
-                    </h4>
-                    <span className="text-[9px] font-mono text-slate-400 uppercase tracking-widest">
-                      VECTOR: {chk.category}
-                    </span>
-                  </div>
-                </div>
-
-                <div>{getStatusBadge(chk.status)}</div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {checks.map((check, i) => {
+        const cfg = STATUS_CONFIG[check.status];
+        const Icon = cfg.icon;
+        return (
+          <motion.div
+            key={check.shortName}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.05 }}
+            className="p-4 rounded-xl bg-white/70 backdrop-blur-sm border border-ink-100 hover:shadow-glass-sm transition-all space-y-2.5"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">{check.icon}</span>
+                <span className="text-xs font-bold text-ink-700 uppercase tracking-wide">{check.shortName}</span>
               </div>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.bg} ${cfg.border} ${cfg.color} border`}>
+                <Icon className="w-2.5 h-2.5" />
+                {cfg.label}
+              </span>
+            </div>
 
-              {/* Detail outcome banner */}
-              <div className="mt-2.5 px-2.5 py-1.5 rounded-lg bg-charcoal-950/60 border border-slate-800/80 text-xs font-mono">
-                <span className="text-slate-400 text-[11px]">Finding: </span>
-                <span className={isFailed ? "text-neon-rose font-medium" : "text-slate-200"}>
-                  {chk.detail}
-                </span>
+            <p className="text-[11px] text-ink-400 leading-snug">{check.name}</p>
+
+            {/* Score bar */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-ink-400">Confidence</span>
+                <span className="text-[10px] font-mono font-bold text-ink-600">{check.score}%</span>
               </div>
-
-              {/* Progress metric bar */}
-              <div className="mt-2.5 space-y-1">
-                <div className="flex justify-between text-[10px] font-mono text-slate-400">
-                  <span>Synthetic Anomaly Probability</span>
-                  <span className={isFailed ? "text-neon-rose font-bold" : "text-matrix-emerald font-bold"}>
-                    {chk.score}%
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-charcoal-950 rounded-full overflow-hidden border border-slate-800">
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ${
-                      isFailed
-                        ? "bg-gradient-to-r from-amber-500 via-neon-rose to-neon-red"
-                        : "bg-gradient-to-r from-cyber-blue to-matrix-emerald"
-                    }`}
-                    style={{ width: `${chk.score}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Forensic Rationale toggle */}
-              <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[10px] font-mono">
-                <button
-                  onClick={() => setExpandedId(isExpanded ? null : chk.id)}
-                  className="flex items-center gap-1 text-slate-400 hover:text-cyber-blue transition-colors"
-                >
-                  <Info className="w-3 h-3" />
-                  <span>{isExpanded ? "Hide Forensic Rationale" : "View Forensic Rationale"}</span>
-                  {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                </button>
-              </div>
-
-              {/* Expanded rationale */}
-              {isExpanded && (
+              <div className="h-1 rounded-full bg-ink-100 overflow-hidden">
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mt-2 p-2.5 rounded-lg bg-charcoal-950 border border-slate-800 text-[11px] text-slate-300 font-sans leading-relaxed"
-                >
-                  <p className="font-mono text-[9px] text-cyber-cyan uppercase tracking-wider mb-1">
-                    SCIENTIFIC EXPLANATION:
-                  </p>
-                  {chk.forensicRationale}
-                </motion.div>
-              )}
-            </motion.div>
-          );
-        })}
-      </div>
+                  className={`h-full rounded-full ${
+                    check.status === "PASS" ? "bg-emerald-400" :
+                    check.status === "FAIL" ? "bg-rose-400" :
+                    check.status === "WARNING" ? "bg-amber-400" : "bg-ink-300"
+                  }`}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${check.score}%` }}
+                  transition={{ duration: 0.6, delay: i * 0.05 }}
+                />
+              </div>
+            </div>
+
+            <p className="text-[11px] text-ink-500 leading-relaxed line-clamp-3">{check.detail}</p>
+          </motion.div>
+        );
+      })}
     </div>
   );
 }

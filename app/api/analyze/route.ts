@@ -1,114 +1,73 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runForensicAnalysis } from "@/lib/forensicEngine";
-import { detectAiWithHuggingFace, getHuggingFaceToken } from "@/lib/huggingface";
-import { DEMO_PRESETS } from "@/lib/mockData";
-import { sleep } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   try {
-    const contentType = req.headers.get("content-type") || "";
-    let fileName = "uploaded_media.png";
-    let fileSize = 1024000;
-    let mimeType = "image/png";
-    let imageBuffer: Buffer | undefined;
-    let presetId: string | undefined;
-    let isDemo = false;
-    let imageBase64: string | undefined;
+    const body = await req.json();
+    const { fileName = "unknown.jpg", fileSize = 0, mimeType = "image/jpeg", imageBase64, fromGenerator = false, width = 0, height = 0 } = body;
 
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await req.formData();
-      const file = formData.get("image") as File | null;
-      presetId = (formData.get("presetId") as string) || undefined;
-      isDemo = formData.get("isDemo") === "true";
+    // Optionally try HF AI image detector if token is present
+    const token = req.headers.get("x-hf-token") || process.env.HUGGINGFACE_API_KEY || process.env.HF_TOKEN;
+    
+    let hfProbability: number | null = null;
+    
+    if (token && imageBase64 && !imageBase64.startsWith("/samples")) {
+      try {
+        const base64Data = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
+        const binaryStr = atob(base64Data);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-      if (file) {
-        fileName = file.name;
-        fileSize = file.size;
-        mimeType = file.type || "image/png";
-        const arrayBuf = await file.arrayBuffer();
-        imageBuffer = Buffer.from(arrayBuf);
-      }
-    } else {
-      const body = await req.json();
-      presetId = body.presetId;
-      isDemo = Boolean(body.isDemo);
-      fileName = body.fileName || "analyzed_image.png";
-      fileSize = body.fileSize || 1200000;
-      mimeType = body.mimeType || "image/png";
-      imageBase64 = body.imageBase64;
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 8000);
 
-      if (imageBase64 && imageBase64.startsWith("data:")) {
-        const base64Data = imageBase64.split(",")[1];
-        if (base64Data) {
-          imageBuffer = Buffer.from(base64Data, "base64");
-          fileSize = imageBuffer.length;
-        }
-      }
-    }
-
-    // Preset lookup (instant presentation mode)
-    if (presetId) {
-      const matched = DEMO_PRESETS.find((p) => p.id === presetId);
-      if (matched) {
-        await sleep(900); // Sleek forensic calculation scan time
-        return NextResponse.json({
-          success: true,
-          report: matched.report,
-          isDemo: true,
-          isPreset: true,
+        const res = await fetch("https://api-inference.huggingface.co/models/umm-maybe/AI-image-detector", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": mimeType || "image/jpeg" },
+          body: bytes,
+          signal: controller.signal,
         });
-      }
-    }
+        clearTimeout(tid);
 
-    // If demo mode is toggled on, check if file matches one of the sample names
-    if (isDemo) {
-      await sleep(1000);
-      for (const preset of DEMO_PRESETS) {
-        if (fileName.includes(preset.report.fileName) || preset.imagePath.includes(fileName)) {
-          return NextResponse.json({
-            success: true,
-            report: preset.report,
-            isDemo: true,
-          });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data[0]?.label && data[0]?.score != null) {
+            const aiLabel = data.find((d: any) => d.label?.toLowerCase().includes("artificial") || d.label?.toLowerCase() === "ai");
+            if (aiLabel) hfProbability = Math.round(aiLabel.score * 100);
+          }
         }
+      } catch {
+        // HF model unavailable — use local engine
       }
     }
 
-    // Check if Hugging Face token is available for live classification
-    let aiProbabilityOverride: number | undefined;
-    const token = getHuggingFaceToken();
+    const engineResult = runForensicAnalysis(fileName, fileSize, mimeType, fromGenerator, width, height);
 
-    if (token && imageBuffer) {
-      const hfDetection = await detectAiWithHuggingFace(imageBuffer);
-      if (hfDetection.success && hfDetection.result) {
-        aiProbabilityOverride = hfDetection.result.aiProbability;
-      }
+    // If HF gave us a real result, blend it with our local engine (60% HF, 40% local)
+    const finalProbability = hfProbability != null
+      ? Math.round(hfProbability * 0.6 + engineResult.syntheticProbability * 0.4)
+      : engineResult.syntheticProbability;
+
+    let verdict: "SYNTHETIC" | "AUTHENTIC" | "INCONCLUSIVE" = engineResult.verdict;
+    let confidence = engineResult.confidence;
+    if (hfProbability != null) {
+      if (finalProbability >= 75) { verdict = "SYNTHETIC"; confidence = "HIGH"; }
+      else if (finalProbability <= 35) { verdict = "AUTHENTIC"; confidence = "HIGH"; }
+      else { verdict = "INCONCLUSIVE"; confidence = "MEDIUM"; }
     }
-
-    // Run Forensic Engine
-    await sleep(700);
-    const report = await runForensicAnalysis({
-      fileName,
-      fileSize,
-      mimeType,
-      buffer: imageBuffer,
-      dataUrl: imageBase64,
-      aiScoreOverride: aiProbabilityOverride,
-    });
 
     return NextResponse.json({
       success: true,
-      report,
-      isDemo: isDemo || !token,
-      isLiveInference: Boolean(token && aiProbabilityOverride !== undefined),
+      result: {
+        ...engineResult,
+        syntheticProbability: finalProbability,
+        verdict,
+        confidence,
+        hfModelUsed: hfProbability != null,
+        hfProbability,
+      },
     });
   } catch (error: any) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message || "Failed to execute forensic image integrity analysis",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message || "Analysis failed" }, { status: 500 });
   }
 }

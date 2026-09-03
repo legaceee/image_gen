@@ -2,21 +2,36 @@ import { NextRequest, NextResponse } from "next/server";
 import { getHuggingFaceToken } from "@/lib/huggingface";
 import { sleep } from "@/lib/utils";
 
-// Optimal dimensions - 768px avoids Pollinations rate limits on large sizes
 const DIMENSIONS: Record<string, { width: number; height: number }> = {
-  "1:1":  { width: 768, height: 768 },
+  "1:1":  { width: 832, height: 832 },
   "16:9": { width: 1024, height: 576 },
   "9:16": { width: 576, height: 1024 },
   "4:3":  { width: 896, height: 672 },
   "3:4":  { width: 672, height: 896 },
 };
 
-const STYLE_ENHANCERS: Record<string, string> = {
-  "Photorealistic":       "photorealistic, professional photograph, sharp focus, high quality, detailed",
-  "Cyberpunk High-Tech":  "cyberpunk, neon lights, futuristic city, dark atmosphere, cinematic lighting",
-  "Cinematic Octane 8K":  "cinematic, dramatic lighting, film quality, epic scene, ultra detailed",
-  "Forensic Raw Evidence":"documentary photograph, forensic evidence, raw unedited, realistic",
-  "Surreal Latent Space": "surreal, dreamlike, vibrant colors, fantasy, artistic masterpiece",
+// FLUX-optimized style enhancers - these phrases work well with FLUX diffusion
+const STYLE_ENHANCERS: Record<string, { positive: string; negative: string }> = {
+  "Photorealistic": {
+    positive: "RAW photo, DSLR, natural lighting, sharp focus, ultra realistic, photorealistic, 85mm f/1.8 lens, professional photography",
+    negative: "cartoon, anime, illustration, painting, sketch, drawing, CGI, render, blurry, low quality, watermark, text, logo, oversaturated, deformed",
+  },
+  "Cinematic Octane 8K": {
+    positive: "cinematic photograph, film still, 35mm film, anamorphic lens, dramatic lighting, depth of field, movie scene, photorealistic, ultra detailed",
+    negative: "cartoon, anime, drawing, flat lighting, blurry, watermark, low quality, text, logo",
+  },
+  "Cyberpunk High-Tech": {
+    positive: "cyberpunk city, neon lights, rain, night scene, blade runner aesthetic, photorealistic, atmospheric, ultra detailed, cinematic",
+    negative: "cartoon, anime, daytime, plain background, watermark, text, blurry, low quality",
+  },
+  "Forensic Raw Evidence": {
+    positive: "documentary photograph, journalistic photo, raw unedited, harsh natural light, realistic, DSLR evidence photography, authentic",
+    negative: "studio lighting, retouched, beauty filter, HDR, cartoon, watermark, text",
+  },
+  "Surreal Latent Space": {
+    positive: "surreal art, dreamlike atmosphere, painterly, magical realism, vibrant colors, highly detailed, fantasy",
+    negative: "photo realistic, blurry, low quality, watermark, text, simple, plain",
+  },
 };
 
 async function generateViaPollinations(
@@ -26,30 +41,32 @@ async function generateViaPollinations(
   seed: number
 ): Promise<{ success: boolean; base64?: string; mime?: string; error?: string }> {
   const dim = DIMENSIONS[aspectRatio] || DIMENSIONS["1:1"];
-  const enhancer = STYLE_ENHANCERS[stylePreset] || "high quality, detailed";
-  const fullPrompt = `${prompt}, ${enhancer}`;
-  const encoded = encodeURIComponent(fullPrompt);
+  const style = STYLE_ENHANCERS[stylePreset] || STYLE_ENHANCERS["Photorealistic"];
 
-  // Note: no 'enhance' param - causes 429 on busy servers; deterministic seed + nologo is sufficient
+  // FLUX-optimized: append cinematic/realism keywords that FLUX responds well to
+  const enhancedPrompt = `${prompt}, ${style.positive}`;
+  const encoded = encodeURIComponent(enhancedPrompt);
+
+  // Use model=flux (FLUX.1-schnell) on Pollinations — proven to work
   const url = `https://image.pollinations.ai/prompt/${encoded}?width=${dim.width}&height=${dim.height}&seed=${seed}&nologo=true&model=flux`;
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 55000);
+    const tid = setTimeout(() => controller.abort(), 58000);
 
     const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
+    clearTimeout(tid);
 
     if (res.ok) {
-      const arrayBuf = await res.arrayBuffer();
-      const base64 = Buffer.from(arrayBuf).toString("base64");
+      const buf = await res.arrayBuffer();
+      const base64 = Buffer.from(buf).toString("base64");
       const mime = res.headers.get("content-type") || "image/jpeg";
       return { success: true, base64, mime };
     }
 
-    return { success: false, error: `HTTP ${res.status} from generation engine` };
+    return { success: false, error: `Engine returned HTTP ${res.status}` };
   } catch (err: any) {
-    return { success: false, error: err.name === "AbortError" ? "Synthesis timed out (55s)" : err.message };
+    return { success: false, error: err.name === "AbortError" ? "Timed out after 58s" : err.message };
   }
 }
 
@@ -57,12 +74,11 @@ async function generateViaHuggingFace(
   prompt: string,
   stylePreset: string,
   seed: number,
-  token: string,
-  negative?: string
+  token: string
 ): Promise<{ success: boolean; base64?: string; mime?: string; error?: string }> {
   const modelName = process.env.HF_IMAGE_GEN_MODEL || "black-forest-labs/FLUX.1-schnell";
-  const enhancer = STYLE_ENHANCERS[stylePreset] || "high quality, detailed";
-  const fullPrompt = `${prompt}, ${enhancer}`;
+  const style = STYLE_ENHANCERS[stylePreset] || STYLE_ENHANCERS["Photorealistic"];
+  const fullPrompt = `${prompt}, ${style.positive}`;
 
   const endpoints = [
     `https://api-inference.huggingface.co/models/${modelName}`,
@@ -71,13 +87,18 @@ async function generateViaHuggingFace(
 
   const payload = {
     inputs: fullPrompt,
-    parameters: { seed, ...(negative ? { negative_prompt: negative } : {}) },
+    parameters: {
+      seed,
+      negative_prompt: style.negative,
+      guidance_scale: 3.5,
+      num_inference_steps: 28,
+    },
   };
 
   for (const endpoint of endpoints) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 40000);
+      const tid = setTimeout(() => controller.abort(), 40000);
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -85,128 +106,91 @@ async function generateViaHuggingFace(
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
-
-      clearTimeout(timeoutId);
+      clearTimeout(tid);
 
       if (res.ok) {
-        const arrayBuf = await res.arrayBuffer();
-        const base64 = Buffer.from(arrayBuf).toString("base64");
+        const buf = await res.arrayBuffer();
+        const base64 = Buffer.from(buf).toString("base64");
         const mime = res.headers.get("content-type") || "image/jpeg";
         return { success: true, base64, mime };
       }
 
-      let errMsg = `HTTP ${res.status}`;
-      try { const j = await res.json(); if (j?.error) errMsg = j.error; } catch {}
-      if (res.status === 503 || res.status === 429) continue; // warming up - try next
-      return { success: false, error: errMsg };
-    } catch {
-      continue; // network error — try next endpoint
-    }
+      try { const j = await res.json(); if (j?.error) console.warn("[HF]", j.error); } catch {}
+      if (res.status === 503 || res.status === 429) continue;
+      return { success: false, error: `HF returned HTTP ${res.status}` };
+    } catch { continue; }
   }
-  return { success: false, error: "Hugging Face endpoints unreachable" };
+  return { success: false, error: "HF endpoints unreachable" };
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const {
-      prompt,
-      negative_prompt,
-      aspect_ratio = "1:1",
-      style_preset = "Photorealistic",
-      isDemo = false,
-      guidance_scale = 7.5,
-    } = body;
+    const { prompt, aspect_ratio = "1:1", style_preset = "Photorealistic", isDemo = false, guidance_scale = 7.5 } = body;
 
-    if (!prompt || typeof prompt !== "string" || prompt.trim().length === 0) {
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return NextResponse.json({ success: false, error: "Prompt is required" }, { status: 400 });
     }
 
     const clientToken = req.headers.get("x-hf-token") || body.apiKey || "";
     const token = getHuggingFaceToken(clientToken) || getHuggingFaceToken(null);
-    const seed = body.seed || Math.floor(Math.random() * 999999999);
-    const startTime = Date.now();
+    const seed = body.seed || Math.floor(Math.random() * 999_999_999);
+    const t0 = Date.now();
 
-    // === DEMO MODE: instant offline presets ===
+    // Demo mode: fast offline presets
     if (isDemo) {
-      await sleep(900);
+      await sleep(800);
       const lower = prompt.toLowerCase();
       let sampleUrl = "/samples/synthetic_portrait.svg";
-      if (lower.includes("city") || lower.includes("cyber") || lower.includes("neon") || lower.includes("street")) {
-        sampleUrl = "/samples/synthetic_cyberpunk.svg";
-      } else if (lower.includes("nature") || lower.includes("mountain") || lower.includes("landscape") || lower.includes("forest")) {
-        sampleUrl = "/samples/authentic_camera.svg";
-      }
+      if (/city|cyber|neon|street|tokyo|night/.test(lower)) sampleUrl = "/samples/synthetic_cyberpunk.svg";
+      else if (/nature|mountain|landscape|forest|photo|real/.test(lower)) sampleUrl = "/samples/authentic_camera.svg";
       return NextResponse.json({
-        success: true,
-        imageBase64: sampleUrl,
-        isDemo: true,
-        provider: "offline-demo",
-        message: "Offline demonstration preset active. Toggle Demo Mode off for live AI image generation.",
-        metadata: { prompt, model: "FLUX.1 [Offline Preset]", seed, aspectRatio: aspect_ratio, stylePreset: style_preset, latencyMs: Date.now() - startTime },
+        success: true, imageBase64: sampleUrl, isDemo: true, provider: "offline-demo",
+        message: "Demo mode active. Turn off Demo Mode in the navbar for live generation.",
+        metadata: { prompt, model: "Offline Demo", seed, aspectRatio: aspect_ratio, stylePreset: style_preset, latencyMs: Date.now() - t0 },
       });
     }
 
-    // === LIVE MODE: HF first, Pollinations fallback ===
+    // Live mode
     let result: { success: boolean; base64?: string; mime?: string; error?: string } = { success: false, error: "No provider" };
     let provider = "";
-    let modelLabel = "FLUX.1 Neural Diffusion Engine";
+    let modelLabel = "FLUX.1 Neural Engine";
 
-    // 1. Hugging Face (if token available and reachable)
+    // Try HF first (if token available)
     if (token) {
-      result = await generateViaHuggingFace(prompt, style_preset, seed, token, negative_prompt);
-      if (result.success) {
-        provider = "huggingface";
-        modelLabel = process.env.HF_IMAGE_GEN_MODEL || "black-forest-labs/FLUX.1-schnell";
-      }
+      result = await generateViaHuggingFace(prompt, style_preset, seed, token);
+      if (result.success) { provider = "huggingface"; modelLabel = process.env.HF_IMAGE_GEN_MODEL || "FLUX.1-schnell"; }
     }
 
-    // 2. Pollinations FLUX engine (primary if HF unavailable, fallback otherwise)
+    // Pollinations fallback (always available)
     if (!result.success) {
       result = await generateViaPollinations(prompt, aspect_ratio, style_preset, seed);
-      if (result.success) {
-        provider = token ? "huggingface-fallback" : "pollinations-flux";
-        modelLabel = "FLUX.1 Neural Diffusion Engine";
-      }
+      if (result.success) { provider = token ? "huggingface-fallback" : "pollinations-flux"; modelLabel = "FLUX.1 Neural Engine"; }
     }
 
-    // 3. Emergency static fallback (network completely down)
+    // Emergency static fallback
     if (!result.success) {
       return NextResponse.json({
-        success: true,
-        imageBase64: "/samples/synthetic_portrait.svg",
-        isFallback: true,
-        isDemo: false,
-        provider: "offline-emergency",
-        message: `Generation unavailable (${result.error}). Showing offline benchmark.`,
-        metadata: { prompt, model: "Emergency Fallback", seed, aspectRatio: aspect_ratio, latencyMs: Date.now() - startTime },
+        success: true, imageBase64: "/samples/synthetic_portrait.svg",
+        isFallback: true, provider: "offline-emergency",
+        message: `All synthesis providers failed: ${result.error}`,
+        metadata: { prompt, model: "Emergency Fallback", seed, latencyMs: Date.now() - t0 },
       });
     }
 
     const dataUrl = `data:${result.mime};base64,${result.base64}`;
+    const style = STYLE_ENHANCERS[style_preset] || STYLE_ENHANCERS["Photorealistic"];
     return NextResponse.json({
-      success: true,
-      imageBase64: dataUrl,
-      isDemo: false,
-      provider,
-      message: `Synthesized: "${prompt.substring(0, 60)}${prompt.length > 60 ? "..." : ""}"`,
+      success: true, imageBase64: dataUrl, isDemo: false, provider,
+      message: `Generated: "${prompt.substring(0, 60)}${prompt.length > 60 ? "..." : ""}"`,
       metadata: {
-        prompt,
-        negative_prompt: negative_prompt || "blurry, low quality, deformed, watermark",
-        model: modelLabel,
-        seed,
-        aspectRatio: aspect_ratio,
-        stylePreset: style_preset,
-        sampler: "FLUX Flow Matching / Euler",
-        steps: 28,
-        guidanceScale: guidance_scale,
-        latencyMs: Date.now() - startTime,
+        prompt, negative_prompt: style.negative,
+        model: modelLabel, seed,
+        aspectRatio: aspect_ratio, stylePreset: style_preset,
+        steps: 28, guidanceScale: 3.5, latencyMs: Date.now() - t0,
       },
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || "Internal server error" },
-      { status: 500 }
-    );
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message || "Internal error" }, { status: 500 });
   }
 }

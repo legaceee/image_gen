@@ -1,339 +1,265 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import {
-  SearchCheck,
-  ShieldAlert,
-  ShieldCheck,
-  AlertTriangle,
-  RefreshCw,
-  FileCheck2,
-  Scan,
-  Cpu,
-  Layers,
-} from "lucide-react";
-import { DropZone } from "@/components/analyze/DropZone";
+import React, { useState, useEffect, useCallback } from "react";
+import { ScanLine, Hash, FileImage, Clock, RefreshCw, AlertCircle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { Badge } from "@/components/ui/Badge";
 import { CircularGauge } from "@/components/analyze/CircularGauge";
 import { ForensicGrid } from "@/components/analyze/ForensicGrid";
 import { HeatmapViewer } from "@/components/analyze/HeatmapViewer";
+import { DropZone } from "@/components/analyze/DropZone";
 import { PresetSelector } from "@/components/analyze/PresetSelector";
 import { ReportExporter } from "@/components/analyze/ReportExporter";
-import { GlassCard } from "@/components/ui/GlassCard";
-import { TelemetryBadge } from "@/components/ui/TelemetryBadge";
-import { CyberButton } from "@/components/ui/CyberButton";
 import { useToast } from "@/components/shared/ToastContext";
-import { useDemoMode } from "@/components/shared/DemoModeContext";
-import { DEMO_PRESETS, DemoPreset, IntegrityReport } from "@/lib/mockData";
+import { computeSHA256, formatBytes } from "@/lib/utils";
+import type { ForensicMetrics } from "@/lib/forensicEngine";
 
-function AnalyzeContent() {
-  const searchParams = useSearchParams();
+const SYNTHETIC_PRESET = {
+  fileName: "FLUX_synthetic_portrait_v3.jpg",
+  fileSize: 1_872_540,
+  mimeType: "image/jpeg",
+  imageUrl: "/samples/synthetic_portrait.svg",
+  fromGenerator: true,
+};
+const AUTHENTIC_PRESET = {
+  fileName: "IMG_4821_Canon_EOS_R5.jpg",
+  fileSize: 8_243_712,
+  mimeType: "image/jpeg",
+  imageUrl: "/samples/authentic_camera.svg",
+  fromGenerator: false,
+};
+
+export default function AnalyzePage() {
   const { toast } = useToast();
-  const { isDemoMode } = useDemoMode();
-
-  const [activePresetId, setActivePresetId] = useState<string | null>("synthetic-portrait");
-  const [selectedImage, setSelectedImage] = useState<string>("/samples/synthetic_portrait.svg");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [fileHash, setFileHash] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [report, setReport] = useState<IntegrityReport | null>(DEMO_PRESETS[0].report);
+  const [result, setResult] = useState<ForensicMetrics | null>(null);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
 
-  // Check if image was passed from Generator via sessionStorage or query params
+  // Read image bridged from generator
   useEffect(() => {
     try {
-      const pendingImage = sessionStorage.getItem("pending_forensic_image");
-      if (pendingImage) {
-        setSelectedImage(pendingImage);
-        setActivePresetId(null);
+      const pending = sessionStorage.getItem("pending_forensic_image");
+      const meta = sessionStorage.getItem("pending_forensic_meta");
+      if (pending && meta) {
         sessionStorage.removeItem("pending_forensic_image");
         sessionStorage.removeItem("pending_forensic_meta");
-
-        // Automatically initiate audit for the transferred image
-        runAnalysis({
-          dataUrl: pendingImage,
-          fileName: "neural_synthesis_target.png",
-          fileSize: 450000,
-          mimeType: "image/png",
-        });
-
-        toast({
-          type: "threat",
-          title: "TARGET ACQUIRED FROM GENERATOR",
-          message: "Initiated multi-spectral forensic audit on generated canvas.",
-        });
+        const m = JSON.parse(meta);
+        setImageUrl(pending);
+        const syntheticFile = new File([], m.fileName || "generated.jpg", { type: m.mimeType || "image/jpeg" });
+        Object.defineProperty(syntheticFile, "size", { value: m.fileSize || 0 });
+        setSelectedFile(syntheticFile);
+        setTimeout(() => runAnalysis({ fileName: m.fileName, fileSize: m.fileSize, mimeType: m.mimeType, imageUrl: pending, fromGenerator: m.source === "generator" }), 400);
       }
-    } catch {
-      // Ignored
-    }
+    } catch {}
   }, []);
 
-  const runAnalysis = async (params: {
-    file?: File;
-    dataUrl?: string;
-    fileName: string;
-    fileSize: number;
-    mimeType: string;
-    presetId?: string;
+  const runAnalysis = useCallback(async (params: {
+    fileName: string; fileSize: number; mimeType: string; imageUrl: string; fromGenerator?: boolean;
   }) => {
     setIsAnalyzing(true);
+    setResult(null);
+
+    let sha = "";
+    if (params.imageUrl && !params.imageUrl.startsWith("/samples")) {
+      try {
+        const base64 = params.imageUrl.includes(",") ? params.imageUrl.split(",")[1] : params.imageUrl;
+        const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+        sha = await computeSHA256(bytes);
+        setFileHash(sha);
+      } catch { sha = "hash-unavailable"; }
+    } else {
+      sha = params.fromGenerator ? "synthetic-preset-sha256" : "authentic-preset-sha256";
+      setFileHash(sha);
+    }
 
     try {
-      let response: Response;
+      let clientToken = "";
+      try { clientToken = localStorage.getItem("forensic_hf_api_key") || ""; } catch {}
 
-      if (params.file) {
-        const formData = new FormData();
-        formData.append("image", params.file);
-        if (params.presetId) formData.append("presetId", params.presetId);
-        formData.append("isDemo", String(isDemoMode));
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-hf-token": clientToken },
+        body: JSON.stringify({
+          fileName: params.fileName,
+          fileSize: params.fileSize,
+          mimeType: params.mimeType,
+          fromGenerator: params.fromGenerator || false,
+          imageBase64: params.imageUrl,
+        }),
+      });
 
-        response = await fetch("/api/analyze", {
-          method: "POST",
-          body: formData,
-        });
-      } else {
-        response = await fetch("/api/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            imageBase64: params.dataUrl,
-            fileName: params.fileName,
-            fileSize: params.fileSize,
-            mimeType: params.mimeType,
-            presetId: params.presetId,
-            isDemo: isDemoMode,
-          }),
-        });
-      }
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Analysis failed");
 
-      const data = await response.json();
+      setResult(data.result);
+      setAnalysisId(data.result.analysisId);
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || "Forensic analysis failed");
-      }
-
-      setReport(data.report);
-
-      const isSynthetic = data.report.aiProbability >= 50;
+      const verdict = data.result.verdict;
       toast({
-        type: isSynthetic ? "threat" : "authentic",
-        title: isSynthetic ? "SYNTHETIC ANOMALY CONFIRMED" : "AUTHENTIC CAPTURE CONFIRMED",
-        message: isSynthetic
-          ? `AI Probability: ${data.report.aiProbability}% (${data.report.suspectedModel})`
-          : `Authenticity Validated (${data.report.aiProbability}% Anomaly Score)`,
+        type: verdict === "SYNTHETIC" ? "error" : verdict === "AUTHENTIC" ? "success" : "warning",
+        title: `VERDICT: ${verdict}`,
+        message: `${data.result.syntheticProbability}% synthetic probability · ${data.result.confidence} confidence`,
       });
     } catch (err: any) {
-      toast({
-        type: "error",
-        title: "ANALYSIS PIPELINE ERROR",
-        message: err.message || "Failed to process target media",
-      });
+      toast({ type: "error", title: "ANALYSIS FAILED", message: err.message });
     } finally {
       setIsAnalyzing(false);
     }
+  }, [toast]);
+
+  const handleFileSelect = async (file: File, dataUrl: string) => {
+    setSelectedFile(file);
+    setImageUrl(dataUrl);
+    setResult(null);
+    setFileHash(null);
+    await runAnalysis({ fileName: file.name, fileSize: file.size, mimeType: file.type, imageUrl: dataUrl });
   };
 
-  const handleSelectPreset = (preset: DemoPreset) => {
-    setActivePresetId(preset.id);
-    setSelectedImage(preset.imagePath);
-    runAnalysis({
-      dataUrl: preset.imagePath,
-      fileName: preset.report.fileName,
-      fileSize: preset.report.fileSize,
-      mimeType: preset.report.mimeType,
-      presetId: preset.id,
-    });
-  };
-
-  const handleImageUploaded = (data: {
-    file?: File;
-    dataUrl: string;
-    fileName: string;
-    fileSize: number;
-    mimeType: string;
-    sha256: string;
-  }) => {
-    setActivePresetId(null);
-    setSelectedImage(data.dataUrl);
-    runAnalysis({
-      file: data.file,
-      dataUrl: data.dataUrl,
-      fileName: data.fileName,
-      fileSize: data.fileSize,
-      mimeType: data.mimeType,
-    });
+  const handlePreset = async (type: "synthetic" | "authentic") => {
+    const p = type === "synthetic" ? SYNTHETIC_PRESET : AUTHENTIC_PRESET;
+    setImageUrl(p.imageUrl);
+    setResult(null);
+    setFileHash(type === "synthetic" ? "a3f9c12d...preset" : "b7e1d45c...preset");
+    const f = new File([], p.fileName, { type: p.mimeType });
+    setSelectedFile(f);
+    await runAnalysis({ fileName: p.fileName, fileSize: p.fileSize, mimeType: p.mimeType, imageUrl: p.imageUrl, fromGenerator: p.fromGenerator });
   };
 
   const handleClear = () => {
-    setSelectedImage("");
-    setReport(null);
-    setActivePresetId(null);
+    setSelectedFile(null);
+    setImageUrl(null);
+    setResult(null);
+    setFileHash(null);
+    setAnalysisId(null);
   };
 
+  const verdict = result?.verdict;
+
   return (
-    <div className="space-y-8 py-4">
+    <div className="space-y-6 py-2">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <SearchCheck className="w-5 h-5 text-neon-rose" />
-            <span className="text-xs font-mono font-bold tracking-widest uppercase text-neon-rose">
-              MODULE 02: FORENSIC AUDIT SUBSYSTEM
-            </span>
+            <ScanLine className="w-4 h-4 text-rose-500" />
+            <span className="text-xs font-semibold text-rose-600 uppercase tracking-widest">Module 02</span>
           </div>
-          <h1 className="text-3xl font-black font-mono tracking-tight text-slate-100">
-            DeepForensics Integrity Engine
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-400 font-sans mt-1">
-            Multi-spectral synthetic media detection, EXIF verification, and sub-pixel deconvolution lattice inspection.
-          </p>
+          <h1 className="text-2xl font-extrabold text-ink-900 tracking-tight">Forensic Integrity Analyzer</h1>
+          <p className="text-sm text-ink-500 mt-0.5">Upload any image to detect whether it is AI-generated or authentic.</p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <TelemetryBadge
-            label="ANALYZER"
-            value="ACTIVE"
-            variant="threat"
-            pulse
-          />
-          <TelemetryBadge
-            label="ENGINE"
-            value={isDemoMode ? "DEMO PRESETS" : "LIVE DETECTION"}
-            variant={isDemoMode ? "threat" : "authentic"}
-          />
+        <div className="flex items-center gap-2 flex-wrap">
+          {verdict && (
+            <Badge
+              label="Verdict"
+              value={verdict}
+              variant={verdict === "SYNTHETIC" ? "threat" : verdict === "AUTHENTIC" ? "authentic" : "default"}
+              pulse={isAnalyzing}
+            />
+          )}
+          {analysisId && (
+            <span className="text-xs font-mono text-ink-400">{analysisId}</span>
+          )}
         </div>
       </div>
 
-      {/* Preset Fast Selector */}
-      <PresetSelector
-        onSelectPreset={handleSelectPreset}
-        activePresetId={activePresetId}
-        isAnalyzing={isAnalyzing}
-      />
-
-      {/* Upload Zone & Ingestion */}
-      <GlassCard variant="default" className="p-4 sm:p-6">
-        <DropZone
-          onImageSelected={handleImageUploaded}
-          selectedPreview={selectedImage}
-          onClear={handleClear}
-          isAnalyzing={isAnalyzing}
-        />
-      </GlassCard>
-
-      {/* Forensic Dashboard Output */}
-      {report && (
-        <div className="space-y-6">
-          {/* Top Verdict Strip */}
-          <div
-            className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-4 ${
-              report.aiProbability >= 50
-                ? "bg-neon-red/10 border-neon-red/40 text-slate-100 shadow-xl shadow-neon-red/5"
-                : "bg-matrix-emerald/10 border-matrix-emerald/40 text-slate-100 shadow-xl shadow-matrix-emerald/5"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`p-3 rounded-xl border ${
-                  report.aiProbability >= 50
-                    ? "bg-neon-red/20 border-neon-red text-neon-red"
-                    : "bg-matrix-emerald/20 border-matrix-emerald text-matrix-emerald"
-                }`}
-              >
-                {report.aiProbability >= 50 ? (
-                  <ShieldAlert className="w-6 h-6 animate-pulse" />
-                ) : (
-                  <ShieldCheck className="w-6 h-6" />
-                )}
-              </div>
-              <div>
-                <h3 className="text-base font-mono font-black tracking-wide uppercase">
-                  {report.verdict.replace(/_/g, " ")}
-                </h3>
-                <p className="text-xs text-slate-300 font-sans mt-0.5">
-                  {report.summary}
-                </p>
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Left Column: Upload + Gauge */}
+        <div className="lg:col-span-1 space-y-4">
+          <GlassCard className="p-5 space-y-4">
+            {/* Upload */}
+            <div>
+              <p className="text-xs font-semibold text-ink-700 uppercase tracking-wide mb-2">Upload Image</p>
+              <DropZone onFileSelect={handleFileSelect} onClear={handleClear} selectedFile={selectedFile} />
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono text-slate-400">MODEL ATTRIBUTION:</span>
-              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-charcoal-950 border border-slate-700 text-slate-200">
-                {report.suspectedModel}
-              </span>
+            {/* File metadata */}
+            <AnimatePresence>
+              {selectedFile && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                  className="space-y-2 text-xs font-mono text-ink-500 border-t border-ink-100 pt-3">
+                  {[
+                    { label: "File", value: selectedFile.name },
+                    { label: "Size", value: formatBytes(selectedFile.size) },
+                    { label: "Type", value: selectedFile.type || "image/jpeg" },
+                    { label: "SHA-256", value: fileHash ? fileHash.substring(0, 20) + "..." : "computing..." },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex justify-between gap-2">
+                      <span className="text-ink-400">{label}</span>
+                      <span className="text-ink-700 truncate max-w-[140px] text-right">{value}</span>
+                    </div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Presets */}
+            <div className="border-t border-ink-100 pt-3">
+              <PresetSelector onSelect={handlePreset} disabled={isAnalyzing} />
             </div>
-          </div>
-
-          {/* Grid Layout: Gauge + Multi-Layer Viewer */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Col: Circular Progress Gauge & Model Signatures */}
-            <div className="lg:col-span-5 space-y-6">
-              <GlassCard
-                variant={report.aiProbability >= 50 ? "threat" : "authentic"}
-                className="p-6 flex flex-col items-center justify-center text-center"
-              >
-                <CircularGauge
-                  score={report.aiProbability}
-                  verdict={report.verdict}
-                  confidence={report.confidence}
-                />
-
-                {/* Architecture Probabilities Breakdown */}
-                <div className="w-full mt-6 pt-4 border-t border-slate-800 space-y-2.5 text-left">
-                  <h4 className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">
-                    Neural Architecture Attribution Matrix
-                  </h4>
-                  <div className="space-y-2">
-                    {report.modelSignatures.map((sig, idx) => (
-                      <div key={idx} className="space-y-1 text-xs font-mono">
-                        <div className="flex justify-between text-slate-300 text-[11px]">
-                          <span>{sig.model}</span>
-                          <span className="font-bold text-slate-100">{sig.probability}%</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-charcoal-950 rounded-full overflow-hidden border border-slate-800">
-                          <div
-                            className={`h-full rounded-full ${
-                              idx === 0
-                                ? report.aiProbability >= 50
-                                  ? "bg-neon-red"
-                                  : "bg-matrix-emerald"
-                                : "bg-slate-700"
-                            }`}
-                            style={{ width: `${sig.probability}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </GlassCard>
-            </div>
-
-            {/* Right Col: Interactive Forensic Viewers */}
-            <div className="lg:col-span-7 space-y-6">
-              <GlassCard variant="default" className="p-4 sm:p-6">
-                <HeatmapViewer imageUrl={selectedImage} report={report} />
-              </GlassCard>
-            </div>
-          </div>
-
-          {/* Verification Checks Grid */}
-          <GlassCard variant="default" className="p-6">
-            <ForensicGrid
-              checks={report.verificationChecks}
-              suspectedModel={report.suspectedModel}
-            />
           </GlassCard>
 
-          {/* Cryptographic Dossier Exporter */}
-          <ReportExporter report={report} />
+          {/* Gauge */}
+          <GlassCard className="p-5 flex flex-col items-center">
+            <p className="text-xs font-semibold text-ink-700 uppercase tracking-wide mb-4">AI Probability Score</p>
+            <CircularGauge
+              probability={result?.syntheticProbability ?? 0}
+              verdict={result?.verdict ?? "INCONCLUSIVE"}
+              confidence={result?.confidence ?? "—"}
+              isLoading={isAnalyzing}
+            />
+            {result && (
+              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="text-xs text-ink-500 text-center mt-3 leading-relaxed">
+                {result.checksummary}
+              </motion.p>
+            )}
+          </GlassCard>
         </div>
-      )}
-    </div>
-  );
-}
 
-export default function AnalyzePage() {
-  return (
-    <Suspense fallback={<div className="p-8 text-center font-mono text-xs text-cyber-blue">INITIALIZING FORENSIC ENVIRONMENT...</div>}>
-      <AnalyzeContent />
-    </Suspense>
+        {/* Right Column: Checks + Viewer */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Forensic checks grid */}
+          <GlassCard className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-ink-700 uppercase tracking-wide">6-Vector Analysis</p>
+              {isAnalyzing && (
+                <div className="flex items-center gap-1.5 text-xs text-brand-600">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  Analyzing...
+                </div>
+              )}
+            </div>
+            {!result && !isAnalyzing ? (
+              <div className="flex flex-col items-center gap-3 py-10 text-center">
+                <div className="w-12 h-12 rounded-xl bg-brand-50 flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 text-brand-300" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-ink-500">Upload an image to run forensic analysis</p>
+                  <p className="text-xs text-ink-400 mt-0.5">Or use the preset samples to see a demo</p>
+                </div>
+              </div>
+            ) : (
+              <ForensicGrid checks={result?.checks ?? []} isLoading={isAnalyzing} />
+            )}
+          </GlassCard>
+
+          {/* Visual Inspector */}
+          {(imageUrl || isAnalyzing) && (
+            <GlassCard className="p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-ink-700 uppercase tracking-wide">Visual Inspector</p>
+                {result && <ReportExporter result={result} fileName={selectedFile?.name || "analysis"} />}
+              </div>
+              <HeatmapViewer imageUrl={imageUrl} result={result} />
+            </GlassCard>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

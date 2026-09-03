@@ -2,146 +2,83 @@
 
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2, ShieldAlert, ShieldCheck } from "lucide-react";
 
-interface CircularGaugeProps {
-  score: number; // 0 to 100
-  verdict: string;
+interface Props {
+  probability: number;
+  verdict: "SYNTHETIC" | "AUTHENTIC" | "INCONCLUSIVE";
   confidence: string;
-  size?: number;
+  isLoading?: boolean;
 }
 
-export function CircularGauge({
-  score,
-  verdict,
-  confidence,
-  size = 280,
-}: CircularGaugeProps) {
-  const [displayedScore, setDisplayedScore] = useState(0);
+export function CircularGauge({ probability, verdict, confidence, isLoading }: Props) {
+  const [displayed, setDisplayed] = useState(0);
+  const radius = 72;
+  const circumference = 2 * Math.PI * radius;
 
   useEffect(() => {
-    // Smooth count up animation
-    let start = 0;
-    const duration = 1200; // ms
-    const stepTime = 20;
-    const steps = duration / stepTime;
-    const increment = score / steps;
+    if (isLoading) { setDisplayed(0); return; }
+    let current = 0;
+    const target = probability;
+    const step = target / 60;
+    const interval = setInterval(() => {
+      current = Math.min(current + step, target);
+      setDisplayed(Math.round(current));
+      if (current >= target) clearInterval(interval);
+    }, 16);
+    return () => clearInterval(interval);
+  }, [probability, isLoading]);
 
-    const timer = setInterval(() => {
-      start += increment;
-      if (start >= score) {
-        setDisplayedScore(score);
-        clearInterval(timer);
-      } else {
-        setDisplayedScore(Math.round(start * 10) / 10);
-      }
-    }, stepTime);
+  const strokeDashoffset = circumference - (displayed / 100) * circumference;
 
-    return () => clearInterval(timer);
-  }, [score]);
+  const colors = {
+    SYNTHETIC: { stroke: "#F43F5E", text: "text-rose-500", bg: "bg-rose-50", border: "border-rose-200", label: "AI Generated" },
+    AUTHENTIC: { stroke: "#10B981", text: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-200", label: "Authentic" },
+    INCONCLUSIVE: { stroke: "#6366F1", text: "text-brand-500", bg: "bg-brand-50", border: "border-brand-200", label: "Inconclusive" },
+  };
 
-  const isSynthetic = score >= 50;
-  const strokeWidth = 14;
-  const radius = (size - strokeWidth * 2) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (score / 100) * circumference;
-
-  const colorClass = isSynthetic
-    ? "text-neon-red drop-shadow-[0_0_16px_rgba(255,42,95,0.6)]"
-    : "text-matrix-emerald drop-shadow-[0_0_16px_rgba(16,185,129,0.6)]";
-
-  const strokeColor = isSynthetic ? "#ff2a5f" : "#10b981";
+  const c = colors[verdict];
 
   return (
-    <div className="relative flex flex-col items-center justify-center p-6 select-none">
-      {/* Outer ambient glow */}
-      <div
-        className={`absolute w-56 h-56 rounded-full blur-3xl opacity-20 pointer-events-none ${
-          isSynthetic ? "bg-neon-red" : "bg-matrix-emerald"
-        }`}
-      />
-
-      {/* SVG Radial Gauge */}
-      <div className="relative" style={{ width: size, height: size }}>
-        <svg className="w-full h-full -rotate-90" viewBox={`0 0 ${size} ${size}`}>
-          {/* Background track circle */}
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke="#151c2e"
-            strokeWidth={strokeWidth}
-          />
-
-          {/* Calibrated Tick Marks */}
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius + 12}
-            fill="none"
-            stroke="#1e2942"
-            strokeWidth="2"
-            strokeDasharray="2 6"
-          />
-
-          {/* Animated Foreground Progress Circle */}
+    <div className="flex flex-col items-center gap-4">
+      <div className="relative">
+        <svg width="180" height="180" viewBox="0 0 180 180" className="-rotate-90">
+          {/* Background track */}
+          <circle cx="90" cy="90" r={radius} fill="none" stroke="#E2E8F0" strokeWidth="10" />
+          {/* Progress arc */}
           <motion.circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
+            cx="90" cy="90" r={radius}
             fill="none"
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
+            stroke={c.stroke}
+            strokeWidth="10"
+            strokeLinecap="round"
             strokeDasharray={circumference}
             initial={{ strokeDashoffset: circumference }}
-            animate={{ strokeDashoffset }}
-            transition={{ duration: 1.4, ease: "easeOut" }}
-            strokeLinecap="round"
+            animate={{ strokeDashoffset: isLoading ? circumference : strokeDashoffset }}
+            transition={{ duration: 1, ease: "easeOut" }}
           />
         </svg>
 
-        {/* Center Telemetry Display */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4">
-          <span className="text-[10px] font-mono tracking-widest uppercase text-slate-400 mb-1">
-            AI PROBABILITY
-          </span>
-          <div className="flex items-baseline gap-0.5">
-            <span
-              className={`text-5xl font-black font-mono tracking-tighter ${
-                isSynthetic ? "text-neon-rose" : "text-matrix-emerald"
-              }`}
-            >
-              {displayedScore.toFixed(1)}
-            </span>
-            <span className="text-xl font-mono font-bold text-slate-400">%</span>
-          </div>
-
-          <div className="mt-2 flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-charcoal-950/80 border border-slate-700/60 text-[10px] font-mono">
-            {isSynthetic ? (
-              <>
-                <ShieldAlert className="w-3 h-3 text-neon-red" />
-                <span className="text-neon-rose font-bold">SYNTHETIC MEDIA</span>
-              </>
-            ) : (
-              <>
-                <ShieldCheck className="w-3 h-3 text-matrix-emerald" />
-                <span className="text-matrix-emerald font-bold">AUTHENTIC CAPTURE</span>
-              </>
-            )}
-          </div>
-          <span className="text-[9px] font-mono text-slate-400 mt-1">
-            CONFIDENCE: <strong className="text-slate-200">{confidence}</strong>
-          </span>
+        {/* Center content */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+          {isLoading ? (
+            <div className="w-6 h-6 rounded-full border-2 border-brand-300 border-t-brand-500 animate-spin" />
+          ) : (
+            <>
+              <span className={`text-3xl font-extrabold font-mono ${c.text}`}>{displayed}%</span>
+              <span className="text-xs text-ink-400 font-medium mt-0.5">synthetic</span>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Metric explanation subtext */}
-      <p className="mt-3 text-xs text-slate-400 font-mono text-center max-w-xs">
-        {isSynthetic
-          ? "Deep latent space signatures and sub-pixel checkerboard patterns detected."
-          : "Natural sensor photon shot noise and physical CMOS Bayer demosaicing validated."}
-      </p>
+      {/* Verdict badge */}
+      {!isLoading && (
+        <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+          className={`px-4 py-2 rounded-xl ${c.bg} border ${c.border} text-center`}>
+          <p className={`text-sm font-bold ${c.text}`}>{c.label}</p>
+          <p className="text-xs text-ink-400 mt-0.5">{confidence} confidence</p>
+        </motion.div>
+      )}
     </div>
   );
 }
