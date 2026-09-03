@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <defs>
+    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a8a"/>
+      <stop offset="40%" stop-color="#3b82f6"/>
+      <stop offset="70%" stop-color="#93c5fd"/>
+      <stop offset="100%" stop-color="#fdba74"/>
+    </linearGradient>
+    <linearGradient id="mountainGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <filter id="bokehBlur">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+
+  <!-- Sky & Sunrise -->
+  <rect width="800" height="800" fill="url(#skyGrad)"/>
+  <circle cx="580" cy="420" r="90" fill="#fef08a" opacity="0.9"/>
+  <circle cx="580" cy="420" r="140" fill="#fed7aa" opacity="0.4" filter="url(#bokehBlur)"/>
+
+  <!-- Distant Mountain Range (Natural Geometry) -->
+  <polygon points="0,520 180,380 320,460 480,340 640,440 800,360 800,800 0,800" fill="url(#mountainGrad)"/>
+  <polygon points="0,580 140,510 260,560 420,470 590,530 800,490 800,800 0,800" fill="#0f172a"/>
+
+  <!-- Forest & Lake Foreground -->
+  <rect x="0" y="620" width="800" height="180" fill="#1e293b"/>
+  <!-- Lake Reflection -->
+  <rect x="0" y="650" width="800" height="150" fill="#0369a1" opacity="0.8"/>
+  <path d="M 0 650 Q 200 660 400 650 T 800 650 L 800 800 L 0 800 Z" fill="#0284c7" opacity="0.4"/>
+
+  <!-- Natural Optical Sensor Grain / Grid Overlay (Simulating genuine Bayer sensor) -->
+  <g stroke="#38bdf8" stroke-opacity="0.12" stroke-width="0.75">
+    <circle cx="400" cy="400" r="220" fill="none" stroke-dasharray="4 8"/>
+    <circle cx="400" cy="400" r="8" fill="none"/>
+    <line x1="380" y1="400" x2="420" y2="400"/>
+    <line x1="400" y1="380" x2="400" y2="420"/>
+  </g>
+
+  <!-- Authentic EXIF Telemetry Watermark -->
+  <g font-family="monospace" font-size="12" fill="#10b981" opacity="0.85">
+    <text x="30" y="50">MAKE/MODEL: CANON EOS R5 (FIRMWARE v1.8.1)</text>
+    <text x="30" y="70">LENS: RF 24-70mm F2.8 L IS USM @ 50mm | f/4.0 | 1/500s | ISO 100</text>
+    <text x="520" y="50">SENSOR: 45MP FULL-FRAME CMOS</text>
+    <text x="520" y="70">INTEGRITY: 0.041 [AUTHENTIC]</text>
+  </g>
+</svg>

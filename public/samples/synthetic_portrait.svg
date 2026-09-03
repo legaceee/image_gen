@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0e1a"/>
+      <stop offset="50%" stop-color="#121829"/>
+      <stop offset="100%" stop-color="#1f1124"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#ff2a5f" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#6366f1" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0a0e1a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="faceGrad" cx="50%" cy="45%" r="40%">
+      <stop offset="0%" stop-color="#e2d4c9"/>
+      <stop offset="70%" stop-color="#b89b88"/>
+      <stop offset="100%" stop-color="#63483b"/>
+    </radialGradient>
+    <filter id="blurFilter">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="800" fill="url(#bgGrad)"/>
+  <circle cx="400" cy="350" r="300" fill="url(#glow)" filter="url(#blurFilter)"/>
+
+  <!-- Neural Mesh / Latent Grid Artifacts -->
+  <g stroke="#ff2a5f" stroke-opacity="0.15" stroke-width="1">
+    <line x1="50" y1="200" x2="750" y2="200"/>
+    <line x1="50" y1="350" x2="750" y2="350"/>
+    <line x1="50" y1="500" x2="750" y2="500"/>
+    <line x1="200" y1="50" x2="200" y2="750"/>
+    <line x1="400" y1="50" x2="400" y2="750"/>
+    <line x1="600" y1="50" x2="600" y2="750"/>
+  </g>
+
+  <!-- Stylized Synthetic Portrait Subject -->
+  <g transform="translate(0, 30)">
+    <!-- Shoulders / Cyber Jacket -->
+    <path d="M 220 700 C 240 540, 310 500, 400 500 C 490 500, 560 540, 580 700 Z" fill="#182238" stroke="#38bdf8" stroke-opacity="0.3" stroke-width="2"/>
+    <path d="M 290 510 L 330 680 L 400 700 L 470 680 L 510 510 Z" fill="#0f172a"/>
+
+    <!-- Neck -->
+    <rect x="365" y="420" width="70" height="100" rx="10" fill="#a07d6c"/>
+
+    <!-- Head / Jaw Silhouette -->
+    <ellipse cx="400" cy="340" rx="125" ry="160" fill="url(#faceGrad)"/>
+
+    <!-- Hair Silhouette -->
+    <path d="M 270 330 C 265 180, 340 140, 400 140 C 470 140, 535 180, 530 330 C 500 240, 460 210, 400 210 C 340 210, 300 240, 270 330 Z" fill="#111827"/>
+    <path d="M 270 330 C 260 420, 290 480, 305 500 C 290 430, 295 350, 280 330 Z" fill="#1e293b"/>
+    <path d="M 530 330 C 540 420, 510 480, 495 500 C 510 430, 505 350, 520 330 Z" fill="#1e293b"/>
+
+    <!-- Eyes (Slight Diffusion Asymmetry) -->
+    <ellipse cx="350" cy="330" rx="18" ry="9" fill="#ffffff"/>
+    <circle cx="351" cy="330" r="7" fill="#1e3a8a"/>
+    <circle cx="353" cy="328" r="2.5" fill="#ffffff"/>
+
+    <ellipse cx="450" cy="329" rx="19" ry="9.5" fill="#ffffff"/>
+    <circle cx="449" cy="329" r="7.5" fill="#0284c7"/>
+    <circle cx="451" cy="327" r="2.8" fill="#ffffff"/>
+
+    <!-- Eyebrows -->
+    <path d="M 330 310 Q 355 300 375 312" stroke="#334155" stroke-width="4" stroke-linecap="round" fill="none"/>
+    <path d="M 425 312 Q 445 300 470 310" stroke="#334155" stroke-width="4" stroke-linecap="round" fill="none"/>
+
+    <!-- Nose -->
+    <path d="M 400 330 L 394 375 L 406 375 Z" fill="#8f6c5c"/>
+
+    <!-- Lips -->
+    <path d="M 370 410 Q 400 398 430 410 Q 400 430 370 410 Z" fill="#9f5656"/>
+
+    <!-- Biometric Wireframe Scan / Anomaly Markers -->
+    <circle cx="351" cy="330" r="24" stroke="#ff2a5f" stroke-width="1.5" stroke-dasharray="3 3" fill="none"/>
+    <circle cx="449" cy="329" r="24" stroke="#ff2a5f" stroke-width="1.5" stroke-dasharray="3 3" fill="none"/>
+    <rect x="360" y="390" width="80" height="40" stroke="#ff2a5f" stroke-width="1.5" stroke-dasharray="4 2" fill="none"/>
+  </g>
+
+  <!-- Forensic Watermark Overlay -->
+  <g font-family="monospace" font-size="12" fill="#ff2a5f" opacity="0.8">
+    <text x="30" y="50">EVIDENCE ID: SYNTH-FLUX-4092</text>
+    <text x="30" y="70">LATENT ANOMALY SCORE: 0.984 [ALERT]</text>
+    <text x="560" y="50">LATENT SAMPLER: DPM++</text>
+    <text x="560" y="70">RESIDUAL: UNIFORM_GAUSS</text>
+  </g>
+</svg>
