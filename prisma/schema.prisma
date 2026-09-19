@@ -1,0 +1,192 @@
+// =============================================================================
+// AI Image Suite — Prisma Schema
+// PostgreSQL · Normalized · UUID PKs · Cascade deletes · No data leaks
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum Verdict {
+  SYNTHETIC
+  AUTHENTIC
+  INCONCLUSIVE
+}
+
+enum OAuthProvider {
+  google
+  github
+  credentials
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USER — core identity table
+// ─────────────────────────────────────────────────────────────────────────────
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String?
+  passwordHash   String?   // null for OAuth-only users
+  image          String?   // avatar URL
+  emailVerified  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  accounts            Account[]
+  sessions            Session[]
+  verificationTokens  VerificationToken[]
+  generatedImages     GeneratedImage[]
+  analysisResults     AnalysisResult[]
+
+  @@index([email])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACCOUNT — OAuth provider links (NextAuth adapter compatible)
+// ─────────────────────────────────────────────────────────────────────────────
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String  // "oauth" | "credentials"
+  provider           String  // "google" | "github" | "credentials"
+  providerAccountId  String
+  refreshToken       String? @db.Text
+  accessToken        String? @db.Text
+  expiresAt          Int?
+  tokenType          String?
+  scope              String?
+  idToken            String? @db.Text
+  sessionState       String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SESSION — active user sessions (NextAuth adapter compatible)
+// ─────────────────────────────────────────────────────────────────────────────
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VERIFICATION TOKEN — email verification + password reset (single table)
+// Uses tokenType enum to distinguish purpose. Token is hashed before storage.
+// ─────────────────────────────────────────────────────────────────────────────
+model VerificationToken {
+  id         String    @id @default(cuid())
+  userId     String
+  token      String    @unique   // bcrypt-hashed token
+  tokenType  TokenType
+  expires    DateTime             // email: 24h, password reset: 1h
+  usedAt     DateTime?            // single-use: set when consumed
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("verification_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GENERATED IMAGE — one row per AI image generation request
+// ─────────────────────────────────────────────────────────────────────────────
+model GeneratedImage {
+  id              String   @id @default(cuid())
+  userId          String
+  prompt          String   @db.Text
+  negativePrompt  String?  @db.Text
+  stylePreset     String   @default("Photorealistic")
+  aspectRatio     String   @default("1:1")
+  seed            BigInt
+  model           String   // e.g. "FLUX.1 Neural Engine"
+  provider        String   // "pollinations-flux" | "huggingface" etc.
+  latencyMs       Int?
+
+  // Cloudflare R2 storage
+  storageKey      String?  // e.g. users/abc/generated/xyz.jpg
+  storageUrl      String?  // public CDN URL
+  fileSizeBytes   Int?
+  width           Int?
+  height          Int?
+
+  createdAt       DateTime @default(now())
+
+  // Relations
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysisResults AnalysisResult[] // image can be analyzed multiple times
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("generated_images")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANALYSIS RESULT — forensic analysis record
+// Can be linked to a GeneratedImage (from /generate → analyze flow)
+// or standalone (user uploads their own photo)
+// ─────────────────────────────────────────────────────────────────────────────
+model AnalysisResult {
+  id                  String   @id @default(cuid())
+  userId              String?  // nullable: allow anonymous analysis
+  generatedImageId    String?  // nullable: set when bridged from generator
+
+  // File info
+  fileName            String
+  fileSizeBytes       Int
+  mimeType            String
+  sha256Hash          String?
+
+  // R2 storage for the analyzed file (uploaded images only)
+  storageKey          String?
+  storageUrl          String?
+
+  // Forensic results
+  syntheticProbability Decimal  @db.Decimal(5, 2)
+  verdict             Verdict
+  confidence          String
+  hfModelUsed         Boolean  @default(false)
+  checksJson          Json     // ForensicCheck[] serialized
+  metadataJson        Json?    // extra metadata
+
+  analysisId          String   @unique // e.g. FSC-XXXX
+  processingTimeMs    Int?
+
+  createdAt           DateTime @default(now())
+
+  // Relations
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  generatedImage  GeneratedImage? @relation(fields: [generatedImageId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([generatedImageId])
+  @@index([createdAt])
+  @@map("analysis_results")
+}
