@@ -75,6 +75,13 @@ async function generateViaHuggingFace(prompt: string, stylePreset: string, seed:
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: "Authentication required. Please sign in to generate images." },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
     const { prompt, aspect_ratio = "1:1", style_preset = "Photorealistic", isDemo = false, guidance_scale = 7.5 } = body;
 

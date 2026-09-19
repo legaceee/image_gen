@@ -9,7 +9,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 const features = [
   { icon: Zap, title: "FLUX Neural Engine", desc: "Powered by FLUX.1 diffusion model. Any prompt generates a unique, high-quality image in seconds." },
   { icon: Shield, title: "Forensic Detection", desc: "Multi-vector analysis: EXIF, noise residuals, ELA error maps, and Fourier spectrum banding." },
-  { icon: Lock, title: "No Account Needed", desc: "Works out of the box — no login, no usage limits. Optionally connect your Hugging Face token." },
+  { icon: Lock, title: "Secure Account & Cloud", desc: "Sign in to generate photorealistic images, track generation history, and store assets in Cloudflare R2." },
   { icon: BarChart3, title: "Detailed Reports", desc: "Export full forensic certificates as JSON or printable PDF for academic and professional use." },
 ];
 

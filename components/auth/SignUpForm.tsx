@@ -79,7 +79,7 @@ export function SignUpForm() {
         <label className="text-xs font-semibold text-ink-700 uppercase tracking-wide">Full Name</label>
         <div className="relative">
           <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
-          <input type="text" value={form.name} onChange={set("name")} required placeholder="John Doe"
+          <input type="text" value={form.name} onChange={set("name")} required placeholder="Sanika Raut"
             autoComplete="name" minLength={2} maxLength={60}
             className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-ink-100/40 border border-ink-200 text-sm text-ink-900 placeholder-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-400" />
         </div>
@@ -89,7 +89,7 @@ export function SignUpForm() {
         <label className="text-xs font-semibold text-ink-700 uppercase tracking-wide">Email</label>
         <div className="relative">
           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
-          <input type="email" value={form.email} onChange={set("email")} required placeholder="you@example.com"
+          <input type="email" value={form.email} onChange={set("email")} required placeholder="sanika.raut@example.com"
             autoComplete="email"
             className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-ink-100/40 border border-ink-200 text-sm text-ink-900 placeholder-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-400" />
         </div>

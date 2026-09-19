@@ -79,7 +79,7 @@ export function Navbar() {
                       }
                     </div>
                     <span className="text-xs font-medium text-ink-700 max-w-[90px] truncate">
-                      {session.user.name || session.user.email}
+                      {session.user.name || "Sanika Raut"}
                     </span>
                     <ChevronDown className="w-3 h-3 text-ink-400" />
                   </button>
@@ -89,7 +89,7 @@ export function Navbar() {
                       <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
                         className="absolute right-0 top-full mt-1.5 w-48 glass-card rounded-xl py-1.5 shadow-glass z-50">
                         <div className="px-3 py-2 border-b border-ink-100">
-                          <p className="text-xs font-semibold text-ink-800 truncate">{session.user.name || "User"}</p>
+                          <p className="text-xs font-semibold text-ink-800 truncate">{session.user.name || "Sanika Raut"}</p>
                           <p className="text-[10px] text-ink-400 truncate">{session.user.email}</p>
                         </div>
                         <Link href="/history" onClick={() => setUserMenuOpen(false)}

@@ -8,7 +8,9 @@ export default withAuth({
 
 export const config = {
   matcher: [
+    "/generate/:path*",
     "/history/:path*",
+    "/api/generate/:path*",
     "/api/history/:path*",
   ],
 };

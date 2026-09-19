@@ -2,7 +2,9 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wand2, RefreshCw, ChevronDown, Loader2 } from "lucide-react";
+import { Wand2, RefreshCw, ChevronDown, Loader2, LogIn, Lock } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 const SAMPLE_PROMPTS = [
   "Indian police officer in khaki uniform, standing proudly, photorealistic",
@@ -34,6 +36,8 @@ interface Props {
 }
 
 export function PromptConsole({ onGenerate, isGenerating, generationStep }: Props) {
+  const { data: session } = useSession();
+  const router = useRouter();
   const [prompt, setPrompt] = useState("");
   const [negative, setNegative] = useState("");
   const [style, setStyle] = useState("Photorealistic");
@@ -42,6 +46,10 @@ export function PromptConsole({ onGenerate, isGenerating, generationStep }: Prop
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!session?.user) {
+      router.push("/auth/signin?callbackUrl=/generate");
+      return;
+    }
     if (!prompt.trim() || isGenerating) return;
     onGenerate({ prompt: prompt.trim(), negative_prompt: negative || undefined, aspect_ratio: ratio, style_preset: style });
   };
@@ -143,14 +151,24 @@ export function PromptConsole({ onGenerate, isGenerating, generationStep }: Prop
         )}
       </AnimatePresence>
 
+      {/* Authentication notice if not signed in */}
+      {!session?.user && (
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-brand-50/80 border border-brand-200/60 text-brand-800 text-xs">
+          <Lock className="w-3.5 h-3.5 text-brand-600 flex-shrink-0" />
+          <span>You must be signed in to generate images and save them to Cloudflare R2.</span>
+        </div>
+      )}
+
       {/* Submit */}
       <motion.button
         type="submit"
-        disabled={!prompt.trim() || isGenerating}
+        disabled={session?.user ? (!prompt.trim() || isGenerating) : false}
         whileTap={{ scale: 0.98 }}
         className="w-full py-3 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed bg-brand-500 hover:bg-brand-600 text-white shadow-sm shadow-brand-500/25 hover:shadow-md hover:shadow-brand-500/30"
       >
-        {isGenerating ? (
+        {!session?.user ? (
+          <><LogIn className="w-4 h-4" /> Sign In to Generate Image</>
+        ) : isGenerating ? (
           <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
         ) : (
           <><Wand2 className="w-4 h-4" /> Generate Image</>

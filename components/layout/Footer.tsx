@@ -13,7 +13,7 @@ export function Footer() {
             <span className="font-semibold text-sm text-ink-700">AI Image Suite</span>
           </div>
           <p className="text-xs text-ink-400 text-center">
-            Final-Year Capstone — Computer Science · Text-to-Image Generation & Synthetic Media Verification
+            Final-Year Capstone — Computer Science · Developed by Sanika Raut · Text-to-Image Generation & Forensic Verification
           </p>
           <div className="flex items-center gap-4">
             <span className="text-xs text-ink-400 font-mono">C2PA</span>
