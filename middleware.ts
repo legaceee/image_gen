@@ -9,8 +9,10 @@ export default withAuth({
 export const config = {
   matcher: [
     "/generate/:path*",
+    "/analyze/:path*",
     "/history/:path*",
     "/api/generate/:path*",
+    "/api/analyze/:path*",
     "/api/history/:path*",
   ],
 };

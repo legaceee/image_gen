@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { ScanLine, Hash, FileImage, Clock, RefreshCw, AlertCircle } from "lucide-react";
+import { ScanLine, Hash, FileImage, Clock, RefreshCw, AlertCircle, Lock, LogIn } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
@@ -31,6 +34,8 @@ const AUTHENTIC_PRESET = {
 };
 
 export default function AnalyzePage() {
+  const { data: session } = useSession();
+  const router = useRouter();
   const { toast } = useToast();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -60,6 +65,11 @@ export default function AnalyzePage() {
   const runAnalysis = useCallback(async (params: {
     fileName: string; fileSize: number; mimeType: string; imageUrl: string; fromGenerator?: boolean;
   }) => {
+    if (!session?.user) {
+      router.push("/auth/signin?callbackUrl=/analyze");
+      return;
+    }
+
     setIsAnalyzing(true);
     setResult(null);
 
@@ -112,6 +122,10 @@ export default function AnalyzePage() {
   }, [toast]);
 
   const handleFileSelect = async (file: File, dataUrl: string) => {
+    if (!session?.user) {
+      router.push("/auth/signin?callbackUrl=/analyze");
+      return;
+    }
     setSelectedFile(file);
     setImageUrl(dataUrl);
     setResult(null);
@@ -120,6 +134,10 @@ export default function AnalyzePage() {
   };
 
   const handlePreset = async (type: "synthetic" | "authentic") => {
+    if (!session?.user) {
+      router.push("/auth/signin?callbackUrl=/analyze");
+      return;
+    }
     const p = type === "synthetic" ? SYNTHETIC_PRESET : AUTHENTIC_PRESET;
     setImageUrl(p.imageUrl);
     setResult(null);
@@ -141,6 +159,26 @@ export default function AnalyzePage() {
 
   return (
     <div className="space-y-6 py-2">
+      {/* Auth Banner if not signed in */}
+      {!session?.user && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-2xl bg-brand-50/90 border border-brand-200/80 text-brand-900">
+          <div className="flex items-center gap-2.5">
+            <Lock className="w-5 h-5 text-brand-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold">Sign In Required</p>
+              <p className="text-xs text-brand-700">You must be signed in to upload and analyze images with the forensic engine.</p>
+            </div>
+          </div>
+          <Link
+            href="/auth/signin?callbackUrl=/analyze"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 hover:bg-brand-600 text-white transition-all shadow-sm flex-shrink-0"
+          >
+            <LogIn className="w-3.5 h-3.5" />
+            Sign In to Analyze
+          </Link>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>

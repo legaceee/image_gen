@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { runForensicAnalysis } from "@/lib/forensicEngine";
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { success: false, error: "Authentication required. Please sign in to analyze images." },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
     const { fileName = "unknown.jpg", fileSize = 0, mimeType = "image/jpeg", imageBase64, fromGenerator = false, width = 0, height = 0 } = body;
 
