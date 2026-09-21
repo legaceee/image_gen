@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ImagePlus, Key, Info } from "lucide-react";
 import { PromptConsole } from "@/components/generate/PromptConsole";
 import { ImageCanvas } from "@/components/generate/ImageCanvas";
@@ -20,6 +20,29 @@ export default function GeneratePage() {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<any>(null);
   const [diagnostics, setDiagnostics] = useState<any>(null);
+
+  // Restore state on reload so user never loses their generated image
+  useEffect(() => {
+    try {
+      const savedImg = localStorage.getItem("ai_suite_image");
+      const savedMeta = localStorage.getItem("ai_suite_meta");
+      const savedDiag = localStorage.getItem("ai_suite_diag");
+      if (savedImg) setGeneratedImage(savedImg);
+      if (savedMeta) setMetadata(JSON.parse(savedMeta));
+      if (savedDiag) setDiagnostics(JSON.parse(savedDiag));
+    } catch {}
+  }, []);
+
+  const handleClearCanvas = () => {
+    setGeneratedImage(null);
+    setMetadata(null);
+    setDiagnostics(null);
+    try {
+      localStorage.removeItem("ai_suite_image");
+      localStorage.removeItem("ai_suite_meta");
+      localStorage.removeItem("ai_suite_diag");
+    } catch {}
+  };
 
   const STEPS = [
     "Tokenizing prompt into latent embeddings...",
@@ -54,6 +77,13 @@ export default function GeneratePage() {
       setGeneratedImage(data.imageBase64);
       setMetadata(data.metadata);
       setDiagnostics(data.diagnostics);
+
+      // Persist state to localStorage for persistence across reloads
+      try {
+        localStorage.setItem("ai_suite_image", data.imageBase64);
+        if (data.metadata) localStorage.setItem("ai_suite_meta", JSON.stringify(data.metadata));
+        if (data.diagnostics) localStorage.setItem("ai_suite_diag", JSON.stringify(data.diagnostics));
+      } catch {}
 
       toast({
         type: data.isFallback ? "warning" : "success",
@@ -125,6 +155,7 @@ export default function GeneratePage() {
           isGenerating={isGenerating}
           metadata={metadata}
           diagnostics={diagnostics}
+          onClear={handleClearCanvas}
         />
       </div>
 

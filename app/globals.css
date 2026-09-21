@@ -7,6 +7,11 @@
 @layer base {
   * { box-sizing: border-box; }
 
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
   body {
     background: linear-gradient(135deg, #F0F4FF 0%, #FAFBFF 55%, #F5F0FF 100%);
     min-height: 100vh;

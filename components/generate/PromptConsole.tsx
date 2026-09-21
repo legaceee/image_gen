@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Wand2, RefreshCw, ChevronDown, Loader2, LogIn, Lock } from "lucide-react";
 import { useSession } from "next-auth/react";
@@ -44,6 +44,45 @@ export function PromptConsole({ onGenerate, isGenerating, generationStep }: Prop
   const [ratio, setRatio] = useState("1:1");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Restore state on reload
+  useEffect(() => {
+    try {
+      const savedPrompt = localStorage.getItem("ai_suite_prompt");
+      const savedStyle = localStorage.getItem("ai_suite_style");
+      const savedRatio = localStorage.getItem("ai_suite_ratio");
+      const savedNeg = localStorage.getItem("ai_suite_negative");
+      if (savedPrompt) setPrompt(savedPrompt);
+      if (savedStyle) setStyle(savedStyle);
+      if (savedRatio) setRatio(savedRatio);
+      if (savedNeg) setNegative(savedNeg);
+    } catch {}
+  }, []);
+
+  const handlePromptChange = (val: string) => {
+    setPrompt(val);
+    try { localStorage.setItem("ai_suite_prompt", val); } catch {}
+  };
+
+  const handleStyleChange = (val: string) => {
+    setStyle(val);
+    try { localStorage.setItem("ai_suite_style", val); } catch {}
+  };
+
+  const handleRatioChange = (val: string) => {
+    setRatio(val);
+    try { localStorage.setItem("ai_suite_ratio", val); } catch {}
+  };
+
+  const handleNegativeChange = (val: string) => {
+    setNegative(val);
+    try { localStorage.setItem("ai_suite_negative", val); } catch {}
+  };
+
+  const handleClearPrompt = () => {
+    setPrompt("");
+    try { localStorage.removeItem("ai_suite_prompt"); } catch {}
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!session?.user) {
@@ -55,24 +94,39 @@ export function PromptConsole({ onGenerate, isGenerating, generationStep }: Prop
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4 w-full max-w-full overflow-hidden">
       {/* Prompt textarea */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-ink-700 uppercase tracking-wide">Prompt</label>
+      <div className="space-y-1.5 w-full">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-ink-700 uppercase tracking-wide">Prompt</label>
+          {prompt.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearPrompt}
+              className="text-[11px] text-ink-400 hover:text-rose-600 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
         <textarea
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={(e) => handlePromptChange(e.target.value)}
           placeholder="Describe the image you want to generate..."
           rows={4}
           disabled={isGenerating}
           className="w-full px-3.5 py-3 rounded-xl bg-ink-100/40 border border-ink-200 text-sm text-ink-900 placeholder-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-400/40 focus:border-brand-400 resize-none transition-all"
         />
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <span className="text-[11px] text-ink-400 font-mono">{prompt.length} chars</span>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 flex-wrap">
             {SAMPLE_PROMPTS.slice(0, 2).map((p, i) => (
-              <button key={i} type="button" onClick={() => setPrompt(p)}
-                className="text-[11px] px-2 py-0.5 rounded-full bg-brand-50 text-brand-600 border border-brand-100 hover:bg-brand-100 transition-colors">
+              <button
+                key={i}
+                type="button"
+                onClick={() => handlePromptChange(p)}
+                className="text-[11px] px-2 py-0.5 rounded-full bg-brand-50 text-brand-600 border border-brand-100 hover:bg-brand-100 transition-colors"
+              >
                 Sample {i + 1}
               </button>
             ))}
@@ -80,40 +134,51 @@ export function PromptConsole({ onGenerate, isGenerating, generationStep }: Prop
         </div>
       </div>
 
-      {/* Style + Ratio row */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-ink-700 uppercase tracking-wide">Style</label>
-          <div className="flex flex-wrap gap-1.5">
-            {STYLE_PRESETS.map((s) => (
-              <button key={s.value} type="button"
-                onClick={() => setStyle(s.value)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
-                  style === s.value
-                    ? "bg-brand-500 text-white border-brand-500 shadow-sm shadow-brand-500/25"
-                    : "bg-white text-ink-600 border-ink-200 hover:border-brand-300 hover:text-brand-600"
-                }`}>
-                {s.label}
-              </button>
-            ))}
-          </div>
+      {/* Aspect Ratio — Responsive Grid with Zero Overflow */}
+      <div className="space-y-1.5 w-full">
+        <label className="text-xs font-semibold text-ink-700 uppercase tracking-wide flex items-center justify-between">
+          <span>Aspect Ratio</span>
+          <span className="text-[10px] text-ink-400 font-mono lowercase">selected: {ratio}</span>
+        </label>
+        <div className="grid grid-cols-4 gap-1.5 w-full">
+          {ASPECT_RATIOS.map((r) => (
+            <button
+              key={r.value}
+              type="button"
+              onClick={() => handleRatioChange(r.value)}
+              className={`py-2 px-1 text-center rounded-xl text-xs font-mono font-semibold border transition-all ${
+                ratio === r.value
+                  ? "bg-brand-500 text-white border-brand-500 shadow-sm shadow-brand-500/25"
+                  : "bg-white text-ink-700 border-ink-200 hover:border-brand-300 hover:bg-ink-50"
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
         </div>
+      </div>
 
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-ink-700 uppercase tracking-wide">Ratio</label>
-          <div className="flex gap-1.5">
-            {ASPECT_RATIOS.map((r) => (
-              <button key={r.value} type="button"
-                onClick={() => setRatio(r.value)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-medium border transition-all ${
-                  ratio === r.value
-                    ? "bg-brand-500 text-white border-brand-500"
-                    : "bg-white text-ink-600 border-ink-200 hover:border-brand-300"
-                }`}>
-                {r.label}
-              </button>
-            ))}
-          </div>
+      {/* Visual Style Preset */}
+      <div className="space-y-1.5 w-full">
+        <label className="text-xs font-semibold text-ink-700 uppercase tracking-wide flex items-center justify-between">
+          <span>Visual Style</span>
+          <span className="text-[10px] text-ink-400 font-mono">{style}</span>
+        </label>
+        <div className="flex flex-wrap gap-1.5 w-full">
+          {STYLE_PRESETS.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              onClick={() => handleStyleChange(s.value)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                style === s.value
+                  ? "bg-brand-500 text-white border-brand-500 shadow-sm shadow-brand-500/25"
+                  : "bg-white text-ink-700 border-ink-200 hover:border-brand-300 hover:bg-ink-50"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
         </div>
       </div>
 

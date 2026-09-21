@@ -105,7 +105,7 @@ async function generateViaPollinations(
   // NOTE: Avoid &model=flux as upstream community provider returns 429/500
   // Default Pollinations uses modern high-resolution diffusion
   const modelQuery = modelParam ? `&model=${modelParam}` : "";
-  const url = `https://image.pollinations.ai/prompt/${encoded}?width=${dim.width}&height=${dim.height}&seed=${seed}&nologo=true${modelQuery}`;
+  const url = `https://image.pollinations.ai/prompt/${encoded}?width=${dim.width}&height=${dim.height}&seed=${seed}&nologo=true&nofeed=true&logo=false&private=true${modelQuery}`;
 
   try {
     const controller = new AbortController();

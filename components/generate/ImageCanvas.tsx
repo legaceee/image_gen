@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, ScanLine, Copy, ImageIcon, Loader2, Terminal } from "lucide-react";
+import { Download, ScanLine, Copy, ImageIcon, Loader2, Terminal, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { DiagnosticModal } from "@/components/generate/DiagnosticModal";
@@ -12,9 +12,10 @@ interface Props {
   isGenerating: boolean;
   metadata: any;
   diagnostics?: any;
+  onClear?: () => void;
 }
 
-export function ImageCanvas({ imageUrl, isGenerating, metadata, diagnostics }: Props) {
+export function ImageCanvas({ imageUrl, isGenerating, metadata, diagnostics, onClear }: Props) {
   const router = useRouter();
   const [showDiag, setShowDiag] = useState(false);
 
@@ -66,6 +67,12 @@ export function ImageCanvas({ imageUrl, isGenerating, metadata, diagnostics }: P
               <button onClick={handleDownload} title="Download image"
                 className="p-1.5 rounded-lg text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition-all">
                 <Download className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onClear && (
+              <button onClick={onClear} title="Clear canvas / start new"
+                className="p-1.5 rounded-lg text-ink-400 hover:text-rose-600 hover:bg-rose-50 transition-all">
+                <RotateCcw className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
