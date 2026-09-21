@@ -7,7 +7,10 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(db) as any,
+  // Only activate adapter for OAuth account linking; Credentials uses pure JWT sessions
+  ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ? { adapter: PrismaAdapter(db) as any }
+    : {}),
   session: { strategy: "jwt" },
   pages: {
     signIn: "/auth/signin",

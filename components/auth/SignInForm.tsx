@@ -29,11 +29,20 @@ export function SignInForm({ callbackUrl = "/generate" }: Props) {
     });
 
     if (res?.error) {
-      setError("Invalid email or password");
+      if (res.error === "CredentialsSignin") {
+        setError("Invalid email or password. Please verify your credentials.");
+      } else if (res.error.toLowerCase().includes("configuration") || res.error === "Configuration") {
+        setError("NextAuth Configuration error: Please add NEXTAUTH_SECRET to your Vercel Environment Variables and Redeploy.");
+      } else {
+        setError(`Sign in failed (${res.error}). Check if NEXTAUTH_SECRET is set in Vercel.`);
+      }
       setLoading(false);
-    } else {
+    } else if (res?.ok) {
       router.push(callbackUrl);
       router.refresh();
+    } else {
+      setError("Sign in failed. Please check your network and credentials.");
+      setLoading(false);
     }
   };
 
