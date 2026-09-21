@@ -49,12 +49,31 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error("[Signup]", err);
     const msg = err?.message || "";
-    if (msg.includes("Can't reach database server") || err?.code === "P1001" || !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("user:password@host")) {
+
+    if (!process.env.DATABASE_URL) {
       return NextResponse.json(
-        { error: "Database not connected yet. Please provide a valid PostgreSQL DATABASE_URL in .env.local / Vercel." },
+        { error: "DATABASE_URL environment variable is missing on Vercel. Please check that you selected 'Production' and clicked 'Redeploy'." },
         { status: 503 }
       );
     }
-    return NextResponse.json({ error: "Registration failed: " + (err?.message || "Internal error") }, { status: 500 });
+    if (process.env.DATABASE_URL.includes("user:password@host")) {
+      return NextResponse.json(
+        { error: "DATABASE_URL contains placeholder values. Please replace it with your real PostgreSQL connection string." },
+        { status: 503 }
+      );
+    }
+    if (err?.code === "P1001" || msg.includes("Can't reach database server")) {
+      return NextResponse.json(
+        { error: "Cannot reach database server (Prisma P1001). Check if your database is active, password is correct, and '?sslmode=require' is appended." },
+        { status: 503 }
+      );
+    }
+    if (err?.code === "P2021" || msg.includes("does not exist")) {
+      return NextResponse.json(
+        { error: "Database connected, but tables do not exist yet! Run 'npx prisma db push' in your project directory with your DATABASE_URL." },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ error: `Database error (${err?.code || "unknown"}): ${err?.message || "Registration failed"}` }, { status: 500 });
   }
 }
