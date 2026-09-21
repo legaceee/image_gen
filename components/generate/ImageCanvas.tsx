@@ -1,19 +1,22 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, ScanLine, Copy, ImageIcon, Loader2 } from "lucide-react";
+import { Download, ScanLine, Copy, ImageIcon, Loader2, Terminal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { DiagnosticModal } from "@/components/generate/DiagnosticModal";
 
 interface Props {
   imageUrl: string | null;
   isGenerating: boolean;
   metadata: any;
+  diagnostics?: any;
 }
 
-export function ImageCanvas({ imageUrl, isGenerating, metadata }: Props) {
+export function ImageCanvas({ imageUrl, isGenerating, metadata, diagnostics }: Props) {
   const router = useRouter();
+  const [showDiag, setShowDiag] = useState(false);
 
   const handleDownload = () => {
     if (!imageUrl || imageUrl.startsWith("/samples")) return;
@@ -128,16 +131,34 @@ export function ImageCanvas({ imageUrl, isGenerating, metadata }: Props) {
             ))}
           </div>
 
-          {/* Test integrity CTA */}
-          <button
-            onClick={handleTestIntegrity}
-            className="w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 hover:border-rose-300 transition-all"
-          >
-            <ScanLine className="w-4 h-4" />
-            Test Integrity — Run Forensic Analysis
-          </button>
+          {/* Action buttons */}
+          <div className="space-y-2">
+            <button
+              onClick={handleTestIntegrity}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 hover:border-rose-300 transition-all"
+            >
+              <ScanLine className="w-4 h-4" />
+              Test Integrity — Run Forensic Analysis
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowDiag(true)}
+              className="w-full py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 bg-ink-50 hover:bg-ink-100 text-ink-600 border border-ink-200 transition-all font-mono"
+            >
+              <Terminal className="w-3.5 h-3.5 text-brand-600" />
+              View API Diagnostics & Server Trace
+            </button>
+          </div>
         </motion.div>
       )}
+
+      {/* Diagnostic Modal */}
+      <DiagnosticModal
+        isOpen={showDiag}
+        onClose={() => setShowDiag(false)}
+        currentDiagnostics={diagnostics || metadata?.diagnostics}
+      />
     </GlassCard>
   );
 }

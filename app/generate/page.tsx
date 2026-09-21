@@ -7,6 +7,7 @@ import { ImageCanvas } from "@/components/generate/ImageCanvas";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
 import { ApiKeyModal } from "@/components/shared/ApiKeyModal";
+import { TokenQuotaBadge } from "@/components/generate/TokenQuotaBadge";
 import { useToast } from "@/components/shared/ToastContext";
 import { useDemoMode } from "@/components/shared/DemoModeContext";
 
@@ -18,6 +19,7 @@ export default function GeneratePage() {
   const [apiKeyOpen, setApiKeyOpen] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<any>(null);
+  const [diagnostics, setDiagnostics] = useState<any>(null);
 
   const STEPS = [
     "Tokenizing prompt into latent embeddings...",
@@ -51,13 +53,14 @@ export default function GeneratePage() {
 
       setGeneratedImage(data.imageBase64);
       setMetadata(data.metadata);
+      setDiagnostics(data.diagnostics);
 
       toast({
         type: data.isFallback ? "warning" : "success",
         title: data.isFallback ? "OFFLINE SAMPLE" : "IMAGE GENERATED",
         message: data.isFallback
-          ? "Network unavailable — showing calibrated sample."
-          : `Synthesized in ${data.metadata?.latencyMs}ms via ${data.provider === "huggingface" ? "Hugging Face FLUX" : "FLUX Engine"}.`,
+          ? (data.message || "Network unavailable — showing calibrated sample.")
+          : `Synthesized in ${data.metadata?.latencyMs}ms via ${data.provider}.`,
       });
     } catch (err: any) {
       toast({ type: "error", title: "GENERATION FAILED", message: err.message || "Please try again." });
@@ -81,7 +84,8 @@ export default function GeneratePage() {
           <p className="text-sm text-ink-500 mt-0.5">Type any prompt to generate a real AI image. Generation takes 10–30 seconds.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge label="Engine" value={isDemoMode ? "Demo" : "FLUX Live"} variant={isDemoMode ? "warning" : "authentic"} pulse={!isDemoMode} />
+          <TokenQuotaBadge />
+          <Badge label="Engine" value={isDemoMode ? "Demo" : "Neural Diffusion"} variant={isDemoMode ? "warning" : "authentic"} pulse={!isDemoMode} />
           <button
             onClick={() => setApiKeyOpen(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-ink-200 bg-white text-ink-500 hover:text-brand-600 hover:border-brand-300 transition-all"
@@ -116,7 +120,12 @@ export default function GeneratePage() {
           </GlassCard>
         </div>
 
-        <ImageCanvas imageUrl={generatedImage} isGenerating={isGenerating} metadata={metadata} />
+        <ImageCanvas
+          imageUrl={generatedImage}
+          isGenerating={isGenerating}
+          metadata={metadata}
+          diagnostics={diagnostics}
+        />
       </div>
 
       <ApiKeyModal isOpen={apiKeyOpen} onClose={() => setApiKeyOpen(false)} />
