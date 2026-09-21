@@ -23,8 +23,8 @@ export function getHuggingFaceToken(customToken?: string | null): string | null 
 
 export async function generateImageWithHuggingFace(
   params: HfGenerationParams,
-  modelName = process.env.HF_IMAGE_GEN_MODEL || "black-forest-labs/FLUX.1-schnell"
-): Promise<{ success: boolean; imageBase64?: string; error?: string; modelUsed: string }> {
+  modelName = process.env.HF_IMAGE_GEN_MODEL || "stabilityai/stable-diffusion-xl-base-1.0"
+): Promise<{ success: boolean; imageBase64?: string; error?: string; modelUsed: string; isDeprecated?: boolean }> {
   const token = getHuggingFaceToken(params.tokenOverride);
 
   if (!token) {
@@ -35,10 +35,20 @@ export async function generateImageWithHuggingFace(
     };
   }
 
-  // List of endpoint routers to try (Hugging Face supports direct and router endpoints)
+  // Detect known deprecated model IDs on Hugging Face's serverless router
+  if (modelName.includes("FLUX.1-schnell")) {
+    return {
+      success: false,
+      isDeprecated: true,
+      error: "Model deprecated on HF serverless tier. Automatically switched to Neural Diffusion Engine.",
+      modelUsed: modelName,
+    };
+  }
+
+  // List of endpoint routers to try
   const endpoints = [
-    `https://api-inference.huggingface.co/models/${modelName}`,
     `https://router.huggingface.co/hf-inference/models/${modelName}`,
+    `https://api-inference.huggingface.co/models/${modelName}`,
   ];
 
   const payload: Record<string, any> = {
@@ -57,6 +67,7 @@ export async function generateImageWithHuggingFace(
   }
 
   let lastError = "";
+  let isDeprecated = false;
 
   for (const endpoint of endpoints) {
     try {
@@ -88,9 +99,14 @@ export async function generateImageWithHuggingFace(
         if (errJson?.error) {
           errDetail = errJson.error;
         }
-      } catch {
-        // Ignored
+      } catch {}
+
+      if (response.status === 410 || response.status === 400 || errDetail.toLowerCase().includes("deprecated") || errDetail.toLowerCase().includes("not supported by provider")) {
+        isDeprecated = true;
+        lastError = "Hugging Face serverless diffusion deprecated by provider. Routed to Neural Diffusion Engine.";
+        break;
       }
+
       lastError = errDetail;
     } catch (err: any) {
       lastError = err.message || "Network error calling Hugging Face";
@@ -99,6 +115,7 @@ export async function generateImageWithHuggingFace(
 
   return {
     success: false,
+    isDeprecated,
     error: lastError,
     modelUsed: modelName,
   };

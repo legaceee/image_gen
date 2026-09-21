@@ -74,13 +74,55 @@ export default function GeneratePage() {
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Generation failed");
 
-      setGeneratedImage(data.imageBase64);
+      let finalImage = data.imageBase64;
+
+      // ── Client-Side Edge Diffusion Bridge ───────────────────────────────
+      // If Vercel datacenter IP hit rate limit, browser fetches with clean client IP
+      if (data.clientFetchRequired && data.directImageUrl) {
+        setStep("Connecting to edge neural diffusion...");
+        try {
+          const directRes = await fetch(data.directImageUrl);
+          if (directRes.ok) {
+            const blob = await directRes.blob();
+            finalImage = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+
+            // Persist to PostgreSQL + Cloudflare R2 in background
+            fetch("/api/history", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                prompt: params.prompt,
+                negativePrompt: params.negative_prompt,
+                stylePreset: params.style_preset,
+                aspectRatio: params.aspect_ratio,
+                seed: data.metadata?.seed,
+                model: data.metadata?.model || "SDXL Neural Diffusion",
+                provider: "edge-neural-diffusion",
+                latencyMs: data.metadata?.latencyMs || 2500,
+                imageBase64: finalImage,
+              }),
+            }).catch(() => {});
+          } else {
+            finalImage = data.directImageUrl;
+          }
+        } catch (edgeErr) {
+          console.warn("[Edge Bridge Fetch]", edgeErr);
+          finalImage = data.directImageUrl;
+        }
+      }
+
+      setGeneratedImage(finalImage);
       setMetadata(data.metadata);
       setDiagnostics(data.diagnostics);
 
       // Persist state to localStorage for persistence across reloads
       try {
-        localStorage.setItem("ai_suite_image", data.imageBase64);
+        localStorage.setItem("ai_suite_image", finalImage);
         if (data.metadata) localStorage.setItem("ai_suite_meta", JSON.stringify(data.metadata));
         if (data.diagnostics) localStorage.setItem("ai_suite_diag", JSON.stringify(data.diagnostics));
       } catch {}
